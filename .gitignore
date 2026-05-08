@@ -1,0 +1,40 @@
+## IDEs (IntelliJ, VS Code, Eclipse)
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+## OS-Specific
+.DS_Store
+Thumbs.db
+
+## Spring Boot Backend (Maven)
+target/
+*.jar
+*.war
+*.ear
+HELP.md
+mvnw
+mvnw.cmd
+.mvn/
+
+## Game Frontend (Gradle / LibGDX)
+.gradle/
+build/
+out/
+core/build/
+lwjgl3/build/
+html/build/
+html/war/
+gwt-unitCache/
+.gwt/
+.apt_generated/
+assets/assets.txt
+
+## Java
+*.class
+hs_err_pid*
