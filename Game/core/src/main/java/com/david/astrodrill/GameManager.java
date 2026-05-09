@@ -4,6 +4,7 @@ import com.badlogic.gdx.Game;
 import com.david.astrodrill.screen.LoadingScreen;
 import com.david.astrodrill.screen.MainMenuScreen;
 import com.david.astrodrill.screen.PlayScreen;
+import com.david.astrodrill.screen.FlightScreen;
 
 public class GameManager {
     private static final GameManager instance = new GameManager();
@@ -11,7 +12,7 @@ public class GameManager {
     private Game game;
 
     public enum ScreenType {
-        LOADING, MAIN_MENU, PLAY
+        LOADING, MAIN_MENU, PLAY, FLIGHT
     }
 
     private GameManager() {}
@@ -36,6 +37,9 @@ public class GameManager {
                 break;
             case PLAY:
                 game.setScreen(new PlayScreen());
+                break;
+            case FLIGHT:
+                game.setScreen(new FlightScreen());
                 break;
         }
     }
