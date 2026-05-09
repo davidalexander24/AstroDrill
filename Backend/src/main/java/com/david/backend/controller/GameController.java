@@ -19,8 +19,7 @@ public class GameController {
     }
 
     @PostMapping("/login")
-    public Player login(@RequestBody Map<String, String> request) {
-        String username = request.get("username");
+    public Player login(@RequestParam String username) {
         return gameService.loginOrRegister(username);
     }
 
