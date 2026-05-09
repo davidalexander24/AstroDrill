@@ -1,0 +1,12 @@
+{
+  "name": "astrodrill-launcher",
+  "version": "1.0.0",
+  "scripts": {
+    "backend": "cd Backend && .\\mvnw spring-boot:run",
+    "game": "cd Game && .\\gradlew lwjgl3:run",
+    "dev": "concurrently -c \"blue,green\" -n \"BACKEND,GAME\" \"npm run backend\" \"npm run game\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
