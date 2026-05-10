@@ -44,9 +44,14 @@ public class PlayScreen implements Screen {
         }
     };
 
-    private static final int COLS = 20;
-    private static final int ROWS = 50;
+    private static final int COLS = 100;
+    private static final int ROWS = 300;
     private static final float BLOCK_SIZE = 1f;
+
+    // LanderHub foundation columns (3 blocks wide starting at column 10)
+    private static final int HUB_COL_START = 10;
+    private static final int HUB_COL_END = 12; // inclusive
+    private static final int HUB_FOUNDATION_DEPTH = 5;
 
     @Override
     public void show() {
@@ -74,18 +79,50 @@ public class PlayScreen implements Screen {
                 Block block = blockPool.obtain();
                 
                 BlockType type;
-                if (r < 10) {
+
+                // LanderHub bedrock foundation: columns 10-12, depth 0-5
+                if (c >= HUB_COL_START && c <= HUB_COL_END && r <= HUB_FOUNDATION_DEPTH) {
+                    type = BlockType.BEDROCK;
+                }
+                // Row 0: flat dirt surface
+                else if (r == 0) {
                     type = BlockType.DIRT;
-                } else {
+                }
+                // Crust Layer (depth 1-49)
+                else if (r < 50) {
                     float chance = (float) Math.random();
-                    if (chance < 0.08f) {
-                        type = BlockType.COAL_ORE;
-                    } else if (chance < 0.16f) {
-                        type = BlockType.COPPER_ORE;
-                    } else if (chance < 0.24f) {
+                    if (chance < 0.03f) {
                         type = BlockType.IRON_ORE;
-                    } else {
+                    } else if (chance < 0.08f) {
+                        type = BlockType.COPPER_ORE;
+                    } else if (chance < 0.15f) {
+                        type = BlockType.COAL_ORE;
+                    } else if (chance < 0.30f) {
                         type = BlockType.STONE;
+                    } else {
+                        type = BlockType.DIRT;
+                    }
+                }
+                // Mantle Layer (depth 50-149)
+                else if (r < 150) {
+                    float chance = (float) Math.random();
+                    if (chance < 0.04f) {
+                        type = BlockType.GOLD_ORE;
+                    } else if (chance < 0.10f) {
+                        type = BlockType.SILICON_ORE;
+                    } else if (chance < 0.25f) {
+                        type = BlockType.STONE;
+                    } else {
+                        type = BlockType.BASALT;
+                    }
+                }
+                // Core Layer (depth 150-299)
+                else {
+                    float chance = (float) Math.random();
+                    if (chance < 0.15f) {
+                        type = BlockType.URANIUM_ORE;
+                    } else {
+                        type = BlockType.OBSIDIAN;
                     }
                 }
                 
@@ -119,6 +156,10 @@ public class PlayScreen implements Screen {
         for (int i = 0; i < activeBlocks.size; i++) {
             Block block = activeBlocks.get(i);
             if (block.active && block.bounds.contains(x, y)) {
+                // Prevent mining indestructible blocks (BEDROCK)
+                if (!block.isDestructible) {
+                    return null;
+                }
                 // Prevent mining blocks that support a machine
                 if (isMachineSupportedBy(block)) {
                     return null;
@@ -311,8 +352,16 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Update camera position to follow player's Y
+        // Update camera to follow player, clamped to world bounds
+        camera.position.x = player.x;
         camera.position.y = player.y;
+
+        // Clamp camera X so it doesn't pan past the world edges
+        float halfViewW = camera.viewportWidth / 2f;
+        float worldWidth = COLS * BLOCK_SIZE;
+        if (camera.position.x < halfViewW) camera.position.x = halfViewW;
+        if (camera.position.x > worldWidth - halfViewW) camera.position.x = worldWidth - halfViewW;
+
         camera.update();
         shapeRenderer.setProjectionMatrix(camera.combined);
         
@@ -334,13 +383,25 @@ public class PlayScreen implements Screen {
                         shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); // Silver
                         break;
                     case COAL_ORE:
-                        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); // Dark Gray
+                        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); // Charcoal
+                        break;
+                    case BASALT:
+                        shapeRenderer.setColor(0.25f, 0.25f, 0.25f, 1f); // Dark Gray
                         break;
                     case GOLD_ORE:
-                        shapeRenderer.setColor(1f, 0.84f, 0f, 1f); // Gold
+                        shapeRenderer.setColor(1f, 0.84f, 0f, 1f); // Bright Yellow
+                        break;
+                    case SILICON_ORE:
+                        shapeRenderer.setColor(0.6f, 0.8f, 0.9f, 1f); // Light Blue-Gray
                         break;
                     case URANIUM_ORE:
-                        shapeRenderer.setColor(0f, 1f, 0f, 1f); // Bright Green
+                        shapeRenderer.setColor(0.2f, 1f, 0.2f, 1f); // Neon Green
+                        break;
+                    case OBSIDIAN:
+                        shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 1f); // Near Black
+                        break;
+                    case BEDROCK:
+                        shapeRenderer.setColor(0.1f, 0.1f, 0.3f, 1f); // Dark Blue
                         break;
                     default:
                         shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); // Default
@@ -385,12 +446,15 @@ public class PlayScreen implements Screen {
 
     @Override
     public void resize(int width, int height) {
-        float viewportWidth = COLS * BLOCK_SIZE;
+        // Show ~20 blocks across for readable scale even on the 100-wide grid
+        float viewportWidth = 20f * BLOCK_SIZE;
         float viewportHeight = viewportWidth * ((float) height / width);
         camera.setToOrtho(false, viewportWidth, viewportHeight);
-        camera.position.x = viewportWidth / 2f;
         if (player != null) {
+            camera.position.x = player.x;
             camera.position.y = player.y;
+        } else {
+            camera.position.x = viewportWidth / 2f;
         }
         camera.update();
         hud.stage.getViewport().update(width, height, true);

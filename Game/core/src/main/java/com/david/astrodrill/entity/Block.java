@@ -6,7 +6,7 @@ import com.badlogic.gdx.utils.Pool.Poolable;
 public class Block implements Poolable {
 
     public enum BlockType {
-        DIRT, STONE, COAL_ORE, COPPER_ORE, IRON_ORE, BASALT, GOLD_ORE, SILICON_ORE, OBSIDIAN, URANIUM_ORE
+        DIRT, STONE, COAL_ORE, COPPER_ORE, IRON_ORE, BASALT, GOLD_ORE, SILICON_ORE, OBSIDIAN, URANIUM_ORE, BEDROCK
     }
 
     public BlockType type;
@@ -15,6 +15,7 @@ public class Block implements Poolable {
     public float width;
     public float height;
     public boolean active;
+    public boolean isDestructible = true;
     public Rectangle bounds;
 
     public Block() {
@@ -29,6 +30,7 @@ public class Block implements Poolable {
         this.height = height;
         this.type = type;
         this.active = true;
+        this.isDestructible = (type != BlockType.BEDROCK);
         this.bounds.set(x, y, width, height);
     }
 
@@ -40,6 +42,7 @@ public class Block implements Poolable {
         this.height = 0;
         this.type = null;
         this.active = false;
+        this.isDestructible = true;
         this.bounds.set(0, 0, 0, 0);
     }
 }
