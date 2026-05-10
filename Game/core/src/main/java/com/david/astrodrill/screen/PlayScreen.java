@@ -48,10 +48,10 @@ public class PlayScreen implements Screen {
     private static final int ROWS = 300;
     private static final float BLOCK_SIZE = 1f;
 
-    // LanderHub foundation columns (3 blocks wide starting at column 10)
-    private static final int HUB_COL_START = 10;
-    private static final int HUB_COL_END = 12; // inclusive
-    private static final int HUB_FOUNDATION_DEPTH = 5;
+    // LanderHub foundation columns (7 blocks wide centered under hub)
+    private static final int HUB_COL_START = 8;
+    private static final int HUB_COL_END = 14; // inclusive
+    private static final int HUB_FOUNDATION_DEPTH = 0;
 
     @Override
     public void show() {
@@ -80,7 +80,7 @@ public class PlayScreen implements Screen {
                 
                 BlockType type;
 
-                // LanderHub bedrock foundation: columns 10-12, depth 0-5
+                // LanderHub bedrock foundation: 7 blocks wide at row 0
                 if (c >= HUB_COL_START && c <= HUB_COL_END && r <= HUB_FOUNDATION_DEPTH) {
                     type = BlockType.BEDROCK;
                 }
