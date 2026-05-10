@@ -6,7 +6,7 @@ import com.badlogic.gdx.utils.Pool.Poolable;
 public class Block implements Poolable {
 
     public enum BlockType {
-        DIRT, STONE, COPPER, IRON
+        DIRT, STONE, COAL_ORE, COPPER_ORE, IRON_ORE, BASALT, GOLD_ORE, SILICON_ORE, OBSIDIAN, URANIUM_ORE
     }
 
     public BlockType type;

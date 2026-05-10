@@ -1,5 +1,8 @@
 package com.david.astrodrill.machine;
 
+import com.david.astrodrill.GameManager;
+import com.david.astrodrill.entity.Block;
+import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.screen.PlayScreen;
 
 public class AutoMiner extends Machine {
@@ -16,24 +19,42 @@ public class AutoMiner extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
+        if (!isPowered) return;
+        
         mineTimer += delta;
         if (mineTimer >= MINE_INTERVAL) {
             // Attempt to mine the block directly below the machine
-            if (screen.mineBlockAt(this.x + this.width / 2, this.y - 0.1f)) {
-                // If we successfully mined a block, reset the timer completely
+            Block.BlockType type = screen.mineBlockAt(this.x + this.width / 2, this.y - 0.1f);
+            if (type != null) {
+                // Deposit into Global Vault
+                depositToVault(type);
                 mineTimer = 0f;
+                // Move down
+                this.y -= 1f;
             } else {
-                // Wait a bit before checking again, or just reset
                 mineTimer = 0f;
             }
-            
-            // To make the machine fall down as it mines, we can apply gravity or just set its y
-            // But for now, let's keep it simple. If we want it to fall:
-            this.y -= 1f; // Move down 1 block. Wait, this will make it fall unconditionally.
-            // Let's only move it down if it successfully mined something or if there's no block?
-            // Actually, physics would be better, but we can simply check if we mined it.
-            // If we mined it, we can move down. Wait, we want the machine to fall continuously 
-            // if there's empty space, but let's just make it move down if it successfully mined.
         }
+    }
+
+    private void depositToVault(Block.BlockType type) {
+        GameManager gm = GameManager.getInstance();
+        switch (type) {
+            case IRON_ORE:
+                gm.addItems(ItemType.RAW_IRON, 1);
+                break;
+            case COPPER_ORE:
+                gm.addItems(ItemType.RAW_COPPER, 1);
+                break;
+            case COAL_ORE:
+                gm.addItems(ItemType.RAW_COAL, 1);
+                break;
+            // Ignore other blocks for now or add them if needed
+        }
+    }
+
+    @Override
+    public void process() {
+        // AutoMiner doesn't use the process timer yet
     }
 }

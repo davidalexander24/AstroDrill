@@ -22,6 +22,9 @@ public class Player {
     public Map<Block.BlockType, Integer> inventory;
     private List<InventoryObserver> observers;
     
+    public float maxBattery = 100f;
+    public float currentBattery = 100f;
+    
     // Physics constants
     public static final float GRAVITY = -15f;
     public static final float MAX_FALL_SPEED = -10f;
@@ -76,11 +79,31 @@ public class Player {
 
         // Horizontal input
         velocityX = 0;
+        boolean moving = false;
         if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
             velocityX = -speed;
+            moving = true;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
             velocityX = speed;
+            moving = true;
         }
+
+        boolean mining = Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN);
+        if (moving || mining) {
+            currentBattery -= 5f * delta; // Drain battery
+        }
+
+        if (currentBattery <= 0) {
+            respawn();
+        }
+    }
+
+    public void respawn() {
+        this.x = 10;
+        this.y = 0;
+        this.currentBattery = this.maxBattery;
+        this.inventory.clear();
+        notifyObservers();
     }
 }

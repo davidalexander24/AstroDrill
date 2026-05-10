@@ -16,6 +16,10 @@ import com.david.astrodrill.ui.Hud;
 import com.david.astrodrill.machine.Machine;
 import com.david.astrodrill.machine.MachineFactory;
 import com.david.astrodrill.GameManager;
+import com.david.astrodrill.entity.LanderHub;
+import com.david.astrodrill.machine.CoalGenerator;
+import com.david.astrodrill.machine.Smelter;
+import com.david.astrodrill.machine.Assembler;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +34,8 @@ public class PlayScreen implements Screen {
     private SpriteBatch batch;
     private Hud hud;
     private List<Machine> activeMachines = new ArrayList<>();
+    private LanderHub landerHub;
+    private float powerTickTimer = 0f;
     
     private final Pool<Block> blockPool = new Pool<Block>() {
         @Override
@@ -54,6 +60,11 @@ public class PlayScreen implements Screen {
         // Spawn player on top of the center-most dirt block
         player = new Player(COLS / 2f * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
+        
+        // Spawn LanderHub resting on top of the dirt at column 10
+        landerHub = new LanderHub(10f, 1f, 3f, 3f);
+        
+        GameManager.getInstance().addObserver(hud);
     }
     
     private void generateWorld() {
@@ -67,9 +78,9 @@ public class PlayScreen implements Screen {
                 } else {
                     float chance = (float) Math.random();
                     if (chance < 0.1f) {
-                        type = BlockType.COPPER;
+                        type = BlockType.COPPER_ORE;
                     } else if (chance < 0.2f) {
-                        type = BlockType.IRON;
+                        type = BlockType.IRON_ORE;
                     } else {
                         type = BlockType.STONE;
                     }
@@ -83,18 +94,17 @@ public class PlayScreen implements Screen {
         }
     }
 
-    public boolean mineBlockAt(float x, float y) {
+    public Block.BlockType mineBlockAt(float x, float y) {
         for (int i = 0; i < activeBlocks.size; i++) {
             Block block = activeBlocks.get(i);
             if (block.active && block.bounds.contains(x, y)) {
-                player.addBlockToInventory(block.type);
-                
+                Block.BlockType type = block.type;
                 activeBlocks.removeIndex(i);
                 blockPool.free(block);
-                return true;
+                return type;
             }
         }
-        return false;
+        return null;
     }
 
     @Override
@@ -145,21 +155,27 @@ public class PlayScreen implements Screen {
         // Mining logic
         digTimer -= delta;
         if (digTimer <= 0) {
+            Block.BlockType mined = null;
             if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-                if (mineBlockAt(player.x + player.width / 2, player.y - 0.1f)) digTimer = 0.2f;
+                mined = mineBlockAt(player.x + player.width / 2, player.y - 0.1f);
             } else if ((Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) && blockedX) {
-                if (mineBlockAt(player.x - 0.1f, player.y + player.height / 2)) digTimer = 0.2f;
+                mined = mineBlockAt(player.x - 0.1f, player.y + player.height / 2);
             } else if ((Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) && blockedX) {
-                if (mineBlockAt(player.x + player.width + 0.1f, player.y + player.height / 2)) digTimer = 0.2f;
+                mined = mineBlockAt(player.x + player.width + 0.1f, player.y + player.height / 2);
+            }
+
+            if (mined != null) {
+                player.addBlockToInventory(mined);
+                digTimer = 0.2f;
             }
         }
 
         // Machine Placement Logic
         placeTimer -= delta;
         if (Gdx.input.isKeyPressed(Input.Keys.M) && placeTimer <= 0) {
-            if (player.hasResources(BlockType.IRON, 5) && player.hasResources(BlockType.COPPER, 5)) {
-                player.consumeResources(BlockType.IRON, 5);
-                player.consumeResources(BlockType.COPPER, 5);
+            if (player.hasResources(BlockType.IRON_ORE, 5) && player.hasResources(BlockType.COPPER_ORE, 5)) {
+                player.consumeResources(BlockType.IRON_ORE, 5);
+                player.consumeResources(BlockType.COPPER_ORE, 5);
                 Machine miner = MachineFactory.createMachine("AutoMiner", player.x, player.y);
                 if (miner != null) {
                     activeMachines.add(miner);
@@ -167,10 +183,85 @@ public class PlayScreen implements Screen {
                 placeTimer = 0.5f;
             }
         }
+        
+        if (Gdx.input.isKeyPressed(Input.Keys.G) && placeTimer <= 0) {
+            if (player.hasResources(BlockType.IRON_ORE, 10)) {
+                player.consumeResources(BlockType.IRON_ORE, 10);
+                Machine gen = MachineFactory.createMachine("CoalGenerator", player.x, player.y);
+                if (gen != null) {
+                    activeMachines.add(gen);
+                }
+                placeTimer = 0.5f;
+            }
+        }
+        
+        if (Gdx.input.isKeyPressed(Input.Keys.O) && placeTimer <= 0) {
+            if (player.hasResources(BlockType.IRON_ORE, 15)) {
+                player.consumeResources(BlockType.IRON_ORE, 15);
+                Machine smelter = MachineFactory.createMachine("Smelter", player.x, player.y);
+                if (smelter != null) {
+                    activeMachines.add(smelter);
+                }
+                placeTimer = 0.5f;
+            }
+        }
+        
+        if (Gdx.input.isKeyPressed(Input.Keys.P) && placeTimer <= 0) {
+            if (player.hasResources(BlockType.IRON_ORE, 20)) {
+                player.consumeResources(BlockType.IRON_ORE, 20);
+                Machine assembler = MachineFactory.createMachine("Assembler", player.x, player.y);
+                if (assembler != null) {
+                    activeMachines.add(assembler);
+                }
+                placeTimer = 0.5f;
+            }
+        }
+        
+        // Assembler Recipe Switch
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            for (Machine m : activeMachines) {
+                if (m instanceof Assembler) {
+                    Assembler assembler = (Assembler) m;
+                    if (assembler.currentRecipe == Assembler.Recipe.IRON_GEAR) {
+                        assembler.currentRecipe = Assembler.Recipe.COPPER_WIRE;
+                    } else {
+                        assembler.currentRecipe = Assembler.Recipe.IRON_GEAR;
+                    }
+                }
+            }
+        }
 
         // Flight Transition Logic
         if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
             GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
+        }
+
+        // Power Grid Algorithm
+        powerTickTimer += delta;
+        if (powerTickTimer >= 0.5f) {
+            powerTickTimer = 0f;
+            List<Machine> poweredQueue = new ArrayList<>();
+            
+            for (Machine m : activeMachines) {
+                m.isPowered = false;
+                if (m instanceof CoalGenerator) {
+                    if (((CoalGenerator)m).isGenerating()) {
+                        m.isPowered = true;
+                        poweredQueue.add(m);
+                    }
+                }
+            }
+            
+            int head = 0;
+            while (head < poweredQueue.size()) {
+                Machine current = poweredQueue.get(head++);
+                for (Machine other : activeMachines) {
+                    if (!other.isPowered && other.isAdjacentTo(current.x, current.y, current.width, current.height)) {
+                        other.isPowered = true;
+                        poweredQueue.add(other);
+                    }
+                }
+            }
         }
 
         // Machine Update Logic
@@ -211,11 +302,23 @@ public class PlayScreen implements Screen {
                     case STONE:
                         shapeRenderer.setColor(0.5f, 0.5f, 0.5f, 1f); // Gray
                         break;
-                    case COPPER:
+                    case COPPER_ORE:
                         shapeRenderer.setColor(0.8f, 0.4f, 0.0f, 1f); // Orange
                         break;
-                    case IRON:
+                    case IRON_ORE:
                         shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); // Silver
+                        break;
+                    case COAL_ORE:
+                        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); // Dark Gray
+                        break;
+                    case GOLD_ORE:
+                        shapeRenderer.setColor(1f, 0.84f, 0f, 1f); // Gold
+                        break;
+                    case URANIUM_ORE:
+                        shapeRenderer.setColor(0f, 1f, 0f, 1f); // Bright Green
+                        break;
+                    default:
+                        shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); // Default
                         break;
                 }
                 shapeRenderer.rect(block.x, block.y, block.width, block.height);
@@ -224,9 +327,25 @@ public class PlayScreen implements Screen {
         
         // Render Machines
         for (Machine machine : activeMachines) {
-            shapeRenderer.setColor(0.5f, 0f, 0.5f, 1f); // Purple for AutoMiner
+            if (machine instanceof Smelter) {
+                if (machine.isPowered) shapeRenderer.setColor(1f, 0.6f, 0f, 1f); // Bright Orange
+                else shapeRenderer.setColor(0.5f, 0.3f, 0f, 1f); // Dark Orange
+            } else if (machine instanceof Assembler) {
+                if (machine.isPowered) shapeRenderer.setColor(0f, 1f, 1f, 1f); // Bright Cyan
+                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 1f); // Dark Cyan
+            } else {
+                if (machine.isPowered) {
+                    shapeRenderer.setColor(1f, 1f, 0f, 1f); // Bright Yellow
+                } else {
+                    shapeRenderer.setColor(0.5f, 0f, 0f, 1f); // Dark Red
+                }
+            }
             shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
         }
+        
+        // Render LanderHub
+        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f); // Massive Gray rectangle
+        shapeRenderer.rect(landerHub.x, landerHub.y, landerHub.width, landerHub.height);
         
         // Render Player
         shapeRenderer.setColor(0f, 0.5f, 1f, 1f); // Bright Blue

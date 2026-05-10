@@ -41,3 +41,6 @@ assets/assets.txt
 ## Java
 *.class
 hs_err_pid*
+
+## Others
+.agents
