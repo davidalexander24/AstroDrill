@@ -1,8 +1,10 @@
 package com.david.astrodrill.ui;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
@@ -22,6 +24,8 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private Table table;
     private Label.LabelStyle labelStyle;
     private Label.LabelStyle warningStyle;
+    private BitmapFont font;
+    private FreeTypeFontGenerator generator;
     
     // Battery
     private Label batteryLabel;
@@ -51,8 +55,16 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         table.top().left();
         table.setFillParent(true);
 
-        BitmapFont font = new BitmapFont();
-        font.getData().setScale(1.25f);
+        // Use FreeType for high-quality font
+        generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter parameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        parameter.size = 20; // Increased size for better readability
+        parameter.color = Color.WHITE;
+        parameter.borderWidth = 1f; // Subtle border for better contrast
+        parameter.borderColor = Color.BLACK;
+
+        font = generator.generateFont(parameter);
+
         labelStyle = new Label.LabelStyle(font, Color.WHITE);
         warningStyle = new Label.LabelStyle(font, Color.RED);
 
@@ -166,6 +178,8 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
 
     @Override
     public void dispose() {
+        if (font != null) font.dispose();
+        if (generator != null) generator.dispose();
         stage.dispose();
     }
 }
