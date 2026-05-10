@@ -446,8 +446,8 @@ public class PlayScreen implements Screen {
 
     @Override
     public void resize(int width, int height) {
-        // Show ~20 blocks across for readable scale even on the 100-wide grid
-        float viewportWidth = 20f * BLOCK_SIZE;
+        // Show ~30 blocks across for readable scale even on the 100-wide grid
+        float viewportWidth = 30f * BLOCK_SIZE;
         float viewportHeight = viewportWidth * ((float) height / width);
         camera.setToOrtho(false, viewportWidth, viewportHeight);
         if (player != null) {
