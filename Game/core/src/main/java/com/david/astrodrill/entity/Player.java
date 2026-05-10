@@ -22,6 +22,9 @@ public class Player {
     public Map<Block.BlockType, Integer> inventory;
     private List<InventoryObserver> observers;
     
+    private float spawnX;
+    private float spawnY;
+    
     public float maxBattery = 100f;
     public float currentBattery = 100f;
     
@@ -41,6 +44,8 @@ public class Player {
         this.velocityY = 0;
         this.speed = 5f;
         this.bounds = new Rectangle(x, y, width, height);
+        this.spawnX = x;
+        this.spawnY = y;
         this.inventory = new HashMap<>();
         this.observers = new ArrayList<>();
     }
@@ -122,8 +127,10 @@ public class Player {
     }
 
     public void respawn() {
-        this.x = 10;
-        this.y = 0;
+        this.x = spawnX;
+        this.y = spawnY;
+        this.velocityX = 0;
+        this.velocityY = 0;
         this.currentBattery = this.maxBattery;
         this.inventory.clear();
         notifyObservers();

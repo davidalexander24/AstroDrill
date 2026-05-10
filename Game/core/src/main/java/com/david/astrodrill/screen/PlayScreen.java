@@ -49,8 +49,8 @@ public class PlayScreen implements Screen {
     private static final float BLOCK_SIZE = 1f;
 
     // LanderHub foundation columns (7 blocks wide centered under hub)
-    private static final int HUB_COL_START = 8;
-    private static final int HUB_COL_END = 14; // inclusive
+    private static final int HUB_COL_START = 47;
+    private static final int HUB_COL_END = 53; // inclusive
     private static final int HUB_FOUNDATION_DEPTH = 0;
 
     @Override
@@ -62,13 +62,14 @@ public class PlayScreen implements Screen {
         
         generateWorld();
         
-        // Spawn player on top of the center-most dirt block
-        player = new Player(COLS / 2f * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
+        // Spawn LanderHub resting on top of the dirt at the center (centered on column 50)
+        // Hub width is 3, so it spans columns 49, 50, 51.
+        landerHub = new LanderHub(49f, 1f, 3f, 3f);
+
+        // Spawn player 1 block to the right of the hub
+        player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
         hud.setPlayer(player);
-        
-        // Spawn LanderHub resting on top of the dirt at column 10
-        landerHub = new LanderHub(10f, 1f, 3f, 3f);
         
         GameManager.getInstance().addObserver(hud);
     }
