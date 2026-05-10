@@ -45,6 +45,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         table.setFillParent(true);
 
         BitmapFont font = new BitmapFont();
+        font.getData().setScale(1.25f);
         Label.LabelStyle labelStyle = new Label.LabelStyle(font, Color.WHITE);
         Label.LabelStyle warningStyle = new Label.LabelStyle(font, Color.RED);
 
