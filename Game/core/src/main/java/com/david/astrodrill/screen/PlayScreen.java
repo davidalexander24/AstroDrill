@@ -60,6 +60,7 @@ public class PlayScreen implements Screen {
         // Spawn player on top of the center-most dirt block
         player = new Player(COLS / 2f * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
+        hud.setPlayer(player);
         
         // Spawn LanderHub resting on top of the dirt at column 10
         landerHub = new LanderHub(10f, 1f, 3f, 3f);
@@ -77,9 +78,11 @@ public class PlayScreen implements Screen {
                     type = BlockType.DIRT;
                 } else {
                     float chance = (float) Math.random();
-                    if (chance < 0.1f) {
+                    if (chance < 0.08f) {
+                        type = BlockType.COAL_ORE;
+                    } else if (chance < 0.16f) {
                         type = BlockType.COPPER_ORE;
-                    } else if (chance < 0.2f) {
+                    } else if (chance < 0.24f) {
                         type = BlockType.IRON_ORE;
                     } else {
                         type = BlockType.STONE;
@@ -94,10 +97,32 @@ public class PlayScreen implements Screen {
         }
     }
 
+    /**
+     * Checks whether any active machine is resting on the given block.
+     * Used to protect load-bearing blocks from being mined.
+     */
+    private boolean isMachineSupportedBy(Block block) {
+        for (Machine machine : activeMachines) {
+            // A machine sits on this block if its bottom is at or near the block's top
+            // and they overlap horizontally
+            boolean horizontalOverlap = machine.x < block.bounds.x + block.bounds.width
+                && machine.x + machine.width > block.bounds.x;
+            boolean verticalSupport = Math.abs(machine.y - (block.bounds.y + block.bounds.height)) < 0.15f;
+            if (horizontalOverlap && verticalSupport) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Block.BlockType mineBlockAt(float x, float y) {
         for (int i = 0; i < activeBlocks.size; i++) {
             Block block = activeBlocks.get(i);
             if (block.active && block.bounds.contains(x, y)) {
+                // Prevent mining blocks that support a machine
+                if (isMachineSupportedBy(block)) {
+                    return null;
+                }
                 Block.BlockType type = block.type;
                 activeBlocks.removeIndex(i);
                 blockPool.free(block);
@@ -353,6 +378,7 @@ public class PlayScreen implements Screen {
         
         shapeRenderer.end();
 
+        hud.updateBattery();
         hud.stage.act(delta);
         hud.stage.draw();
     }

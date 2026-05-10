@@ -28,6 +28,9 @@ public class Player {
     // Physics constants
     public static final float GRAVITY = -15f;
     public static final float MAX_FALL_SPEED = -10f;
+    public static final float MAX_RISE_SPEED = 8f;
+    public static final float JETPACK_THRUST = 25f;
+    public static final float JETPACK_BATTERY_DRAIN = 10f;
 
     public Player(float x, float y, float width, float height) {
         this.x = x;
@@ -73,8 +76,22 @@ public class Player {
     public void update(float delta) {
         // Apply gravity
         velocityY += GRAVITY * delta;
+
+        // Jetpack: W / UP applies upward thrust
+        boolean jetting = false;
+        if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
+            if (currentBattery > 0) {
+                velocityY += JETPACK_THRUST * delta;
+                jetting = true;
+            }
+        }
+
+        // Clamp vertical velocity to prevent tunnelling through blocks
         if (velocityY < MAX_FALL_SPEED) {
             velocityY = MAX_FALL_SPEED;
+        }
+        if (velocityY > MAX_RISE_SPEED) {
+            velocityY = MAX_RISE_SPEED;
         }
 
         // Horizontal input
@@ -89,10 +106,15 @@ public class Player {
             moving = true;
         }
 
+        // Battery drain
         boolean mining = Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN);
-        if (moving || mining) {
-            currentBattery -= 5f * delta; // Drain battery
+        if (jetting) {
+            currentBattery -= JETPACK_BATTERY_DRAIN * delta;
+        } else if (moving || mining) {
+            currentBattery -= 5f * delta;
         }
+
+        if (currentBattery < 0) currentBattery = 0;
 
         if (currentBattery <= 0) {
             respawn();
