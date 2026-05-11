@@ -26,6 +26,7 @@ import com.david.astrodrill.machine.CoalGenerator;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.math.Rectangle;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -48,6 +49,7 @@ public class PlayScreen implements Screen {
     private float clickCooldown = 0f;
     private Vector3 pendingClick = null;
     private BitmapFont machineFont;
+    private Rectangle placementCheck = new Rectangle();
 
     // Auto-banking: only bank once per zone entry
     private boolean hasbankedThisEntry = false;
@@ -471,6 +473,10 @@ public class PlayScreen implements Screen {
     }
 
     private void placeMachineAt(float gx, float gy, ItemType machineType) {
+        // Prevent placing on top of the player
+        placementCheck.set(gx, gy, BLOCK_SIZE, BLOCK_SIZE);
+        if (player.bounds.overlaps(placementCheck)) return;
+
         if (!player.consumeMachineItem(machineType)) return;
 
         // Check cell not occupied
@@ -497,6 +503,10 @@ public class PlayScreen implements Screen {
     }
 
     private void placeBlockAt(float gx, float gy, BlockType type) {
+        // Prevent placing on top of the player
+        placementCheck.set(gx, gy, BLOCK_SIZE, BLOCK_SIZE);
+        if (player.bounds.overlaps(placementCheck)) return;
+
         // Must have the block in inventory
         if (!player.hasResources(type, 1)) return;
 
