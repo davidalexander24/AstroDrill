@@ -498,17 +498,24 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     }
 
     private String formatBlockName(Block.BlockType type) {
-        String n = type.name().replace("_ORE", "").replace("_", " ").toLowerCase();
-        String[] w = n.split(" ");
-        StringBuilder sb = new StringBuilder();
-        for (String s : w) sb.append(s.substring(0, 1).toUpperCase()).append(s.substring(1)).append(" ");
-        return sb.toString().trim();
+        String name = type.name();
+        if (name.endsWith("_ORE")) {
+            name = "RAW_" + name.substring(0, name.length() - 4);
+        }
+        return formatNameString(name);
     }
 
     private String formatItemName(ItemType type) {
-        String[] parts = type.name().split("_");
+        return formatNameString(type.name());
+    }
+
+    private String formatNameString(String input) {
+        String[] parts = input.split("_");
         StringBuilder sb = new StringBuilder();
-        for (String p : parts) sb.append(p.substring(0, 1).toUpperCase()).append(p.substring(1).toLowerCase()).append(" ");
+        for (String p : parts) {
+            if (p.isEmpty()) continue;
+            sb.append(p.substring(0, 1).toUpperCase()).append(p.substring(1).toLowerCase()).append(" ");
+        }
         return sb.toString().trim();
     }
 
