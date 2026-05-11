@@ -2,6 +2,7 @@ package com.david.astrodrill.screen;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -36,6 +37,7 @@ public class PlayScreen implements Screen {
     private List<Machine> activeMachines = new ArrayList<>();
     private LanderHub landerHub;
     private float powerTickTimer = 0f;
+    private InputMultiplexer inputMultiplexer;
     
     private final Pool<Block> blockPool = new Pool<Block>() {
         @Override
@@ -62,7 +64,7 @@ public class PlayScreen implements Screen {
         
         generateWorld();
         
-        // Spawn LanderHub resting on top of the dirt at the center (centered on column 50)
+        // Spawn LanderHub resting on top of the dirt at the center (centered on column 50).
         // Hub width is 3, so it spans columns 49, 50, 51.
         landerHub = new LanderHub(49f, 1f, 3f, 3f);
 
@@ -72,6 +74,12 @@ public class PlayScreen implements Screen {
         hud.setPlayer(player);
         
         GameManager.getInstance().addObserver(hud);
+        
+        // Set up InputMultiplexer so the HUD Stage captures mouse clicks
+        // while keyboard input still reaches the game loop via Gdx.input.isKeyPressed()
+        inputMultiplexer = new InputMultiplexer();
+        inputMultiplexer.addProcessor(hud.stage); // Stage gets first priority for clicks
+        Gdx.input.setInputProcessor(inputMultiplexer);
     }
     
     private void generateWorld() {
@@ -180,6 +188,18 @@ public class PlayScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         player.update(delta);
+
+        // ── Hub Proximity Detection & Recharge ───────────────────────────
+        boolean wasInZone = player.isInHubZone;
+        player.isInHubZone = landerHub.isInSafeZone(player.getCenterX(), player.getCenterY());
+
+        if (player.isInHubZone) {
+            // Incremental battery recharge while inside the safe zone
+            player.rechargeBattery(LanderHub.RECHARGE_RATE, delta);
+        }
+
+        // Toggle the Hub Terminal UI on enter / exit
+        hud.setHubPanelVisible(player.isInHubZone);
 
         // X-axis movement and collision
         player.x += player.velocityX * delta;

@@ -27,7 +27,10 @@ public class Player {
     
     public float maxBattery = 100f;
     public float currentBattery = 100f;
-    
+
+    /** Set by PlayScreen each frame — true when inside the LanderHub safe zone. */
+    public boolean isInHubZone = false;
+
     // Physics constants
     public static final float GRAVITY = -15f;
     public static final float MAX_FALL_SPEED = -10f;
@@ -134,5 +137,24 @@ public class Player {
         this.currentBattery = this.maxBattery;
         this.inventory.clear();
         notifyObservers();
+    }
+
+    /**
+     * Incrementally recharges the battery by the given rate * delta.
+     * Called by PlayScreen when the player is inside the Hub safe zone.
+     */
+    public void rechargeBattery(float rate, float delta) {
+        currentBattery += rate * delta;
+        if (currentBattery > maxBattery) {
+            currentBattery = maxBattery;
+        }
+    }
+
+    public float getCenterX() {
+        return x + width / 2f;
+    }
+
+    public float getCenterY() {
+        return y + height / 2f;
     }
 }
