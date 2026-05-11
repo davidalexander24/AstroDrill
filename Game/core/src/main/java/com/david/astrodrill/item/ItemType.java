@@ -6,6 +6,11 @@ public enum ItemType {
     // Placeable block items (correspond to Block.BlockType)
     DIRT, STONE,
 
+    // Machine items (crafted, placed via hotbar)
+    AUTO_MINER, COAL_GENERATOR,
+    IRON_SMELTER, COPPER_SMELTER,
+    GEAR_ASSEMBLER, WIRE_ASSEMBLER,
+
     // Special tools
     DECONSTRUCT_TOOL
 }

@@ -67,13 +67,15 @@ public class Player {
         this.observers = new ArrayList<>();
     }
 
+    /** Separate inventory for crafted machines (ItemType → count). */
+    public Map<ItemType, Integer> machineInventory = new HashMap<>();
+
     /**
-     * Rebuilds the hotbar dynamically based on the player's personal inventory
-     * and the global vault. Only items with count > 0 that are placeable appear.
-     * The Deconstruct Tool is always in the last slot.
+     * Rebuilds the hotbar dynamically based on the player's personal inventory,
+     * machine inventory, and the global vault.
+     * Order: placeable blocks → machine items → DECONSTRUCT_TOOL (always last).
      */
     public void rebuildHotbar() {
-        // Clear all slots
         for (int i = 0; i < HOTBAR_SLOTS; i++) {
             hotbar[i] = null;
         }
@@ -81,7 +83,7 @@ public class Player {
         int slotIdx = 0;
         GameManager gm = GameManager.getInstance();
 
-        // Placeable blocks from personal inventory (Dirt, Stone, etc.)
+        // 1) Placeable blocks from personal inventory / vault
         Block.BlockType[] placeableBlocks = {
             Block.BlockType.DIRT, Block.BlockType.STONE,
             Block.BlockType.COAL_ORE, Block.BlockType.COPPER_ORE, Block.BlockType.IRON_ORE,
@@ -89,24 +91,93 @@ public class Player {
         };
 
         for (Block.BlockType bt : placeableBlocks) {
-            if (slotIdx >= HOTBAR_SLOTS - 1) break; // reserve last slot for deconstruct
-            
+            if (slotIdx >= HOTBAR_SLOTS - 1) break;
+
             ItemType it = blockTypeToItemType(bt);
             if (it == null) continue;
 
             int invCount = inventory.getOrDefault(bt, 0);
             int vaultCount = gm.getItemCount(it);
-            
+
             if (invCount > 0 || vaultCount > 0) {
                 hotbar[slotIdx++] = it;
             }
         }
 
-        // Deconstruct tool always last
+        // 2) Machine items from machineInventory
+        ItemType[] machineTypes = {
+            ItemType.IRON_SMELTER, ItemType.COPPER_SMELTER,
+            ItemType.COAL_GENERATOR,
+            ItemType.GEAR_ASSEMBLER, ItemType.WIRE_ASSEMBLER,
+            ItemType.AUTO_MINER
+        };
+        for (ItemType mt : machineTypes) {
+            if (slotIdx >= HOTBAR_SLOTS - 1) break;
+            int count = machineInventory.getOrDefault(mt, 0);
+            if (count > 0) {
+                hotbar[slotIdx++] = mt;
+            }
+        }
+
+        // 3) Deconstruct tool always last
         hotbar[HOTBAR_SLOTS - 1] = ItemType.DECONSTRUCT_TOOL;
 
-        // Clamp active slot if it went out of range
         if (activeSlot >= HOTBAR_SLOTS) activeSlot = HOTBAR_SLOTS - 1;
+    }
+
+    /**
+     * Adds a crafted machine to the hotbar's machine inventory.
+     * Returns true if successful, false if hotbar is completely full.
+     */
+    public boolean addMachineToHotbar(ItemType machineType) {
+        machineInventory.put(machineType, machineInventory.getOrDefault(machineType, 0) + 1);
+        return true;
+    }
+
+    /** Consumes one machine item from the machine inventory. */
+    public boolean consumeMachineItem(ItemType machineType) {
+        int count = machineInventory.getOrDefault(machineType, 0);
+        if (count <= 0) return false;
+        machineInventory.put(machineType, count - 1);
+        return true;
+    }
+
+    /** Returns the count of a given item in the slot's source (inventory, vault, or machineInventory). */
+    public int getSlotItemCount(ItemType item) {
+        if (item == null) return 0;
+
+        // Check if it's a machine item
+        if (isMachineItem(item)) {
+            return machineInventory.getOrDefault(item, 0);
+        }
+
+        // Otherwise it's a block type
+        Block.BlockType bt = itemTypeToBlockType(item);
+        if (bt != null) {
+            return getTotalResourceCount(bt);
+        }
+        return 0;
+    }
+
+    /** Returns true if this ItemType represents a placeable machine. */
+    public static boolean isMachineItem(ItemType it) {
+        return it == ItemType.AUTO_MINER || it == ItemType.COAL_GENERATOR
+            || it == ItemType.IRON_SMELTER || it == ItemType.COPPER_SMELTER
+            || it == ItemType.GEAR_ASSEMBLER || it == ItemType.WIRE_ASSEMBLER;
+    }
+
+    /** Returns the MachineFactory key string for a machine ItemType. */
+    public static String getMachineFactoryKey(ItemType it) {
+        if (it == null) return null;
+        switch (it) {
+            case AUTO_MINER:       return "AutoMiner";
+            case COAL_GENERATOR:   return "CoalGenerator";
+            case IRON_SMELTER:     return "IronSmelter";
+            case COPPER_SMELTER:   return "CopperSmelter";
+            case GEAR_ASSEMBLER:   return "GearAssembler";
+            case WIRE_ASSEMBLER:   return "WireAssembler";
+            default:               return null;
+        }
     }
 
     /** Maps a BlockType to the corresponding placeable ItemType. */

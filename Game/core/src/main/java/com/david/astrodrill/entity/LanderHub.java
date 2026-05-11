@@ -12,6 +12,9 @@ public class LanderHub {
     /** Rate of battery recharge per second while inside the safe zone. */
     public static final float RECHARGE_RATE = 40f; // ~2.5 seconds from 0 to 100
 
+    /** Current upgrade tier of the hub. Unlocks manufacturing recipes. */
+    public int tier = 1;
+
     public LanderHub(float x, float y, float width, float height) {
         this.x = x;
         this.y = y;
@@ -37,5 +40,9 @@ public class LanderHub {
         float dx = px - getCenterX();
         float dy = py - getCenterY();
         return (dx * dx + dy * dy) <= (SAFE_ZONE_RADIUS * SAFE_ZONE_RADIUS);
+    }
+
+    public void upgradeTier() {
+        tier++;
     }
 }

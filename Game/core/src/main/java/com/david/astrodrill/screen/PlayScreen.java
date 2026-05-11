@@ -23,8 +23,9 @@ import com.david.astrodrill.machine.MachineFactory;
 import com.david.astrodrill.GameManager;
 import com.david.astrodrill.entity.LanderHub;
 import com.david.astrodrill.machine.CoalGenerator;
-import com.david.astrodrill.machine.Smelter;
-import com.david.astrodrill.machine.Assembler;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -40,11 +41,13 @@ public class PlayScreen implements Screen {
     private SpriteBatch batch;
     private Hud hud;
     private List<Machine> activeMachines = new ArrayList<>();
+    public List<Machine> getActiveMachines() { return activeMachines; }
     private LanderHub landerHub;
     private float powerTickTimer = 0f;
     private InputMultiplexer inputMultiplexer;
     private float clickCooldown = 0f;
     private Vector3 pendingClick = null;
+    private BitmapFont machineFont;
 
     // Auto-banking: only bank once per zone entry
     private boolean hasbankedThisEntry = false;
@@ -74,9 +77,20 @@ public class PlayScreen implements Screen {
         generateWorld();
 
         landerHub = new LanderHub(49f, 1f, 3f, 3f);
+
+        FreeTypeFontGenerator.FreeTypeFontParameter machineParam = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        machineParam.size = 12;
+        machineParam.color = Color.WHITE;
+        machineParam.borderWidth = 1f;
+        machineParam.borderColor = Color.BLACK;
+        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
+        machineFont = gen.generateFont(machineParam);
+        gen.dispose();
+
         player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
         hud.setPlayer(player);
+        hud.setLanderHub(landerHub);
 
         GameManager.getInstance().addObserver(hud);
 
@@ -275,106 +289,22 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Machine Placement Logic
-        placeTimer -= delta;
-        if (Gdx.input.isKeyPressed(Input.Keys.M) && placeTimer <= 0) {
-            if (player.hasResources(BlockType.IRON_ORE, 5) && player.hasResources(BlockType.COPPER_ORE, 5)) {
-                player.consumeResources(BlockType.IRON_ORE, 5);
-                player.consumeResources(BlockType.COPPER_ORE, 5);
-                Machine miner = MachineFactory.createMachine("AutoMiner", player.x, player.y);
-                if (miner != null) activeMachines.add(miner);
-                placeTimer = 0.5f;
-            }
-        }
-
-        if (Gdx.input.isKeyPressed(Input.Keys.G) && placeTimer <= 0) {
-            if (player.hasResources(BlockType.IRON_ORE, 10)) {
-                player.consumeResources(BlockType.IRON_ORE, 10);
-                Machine gen = MachineFactory.createMachine("CoalGenerator", player.x, player.y);
-                if (gen != null) activeMachines.add(gen);
-                placeTimer = 0.5f;
-            }
-        }
-
-        if (Gdx.input.isKeyPressed(Input.Keys.O) && placeTimer <= 0) {
-            if (player.hasResources(BlockType.IRON_ORE, 15)) {
-                player.consumeResources(BlockType.IRON_ORE, 15);
-                Machine smelter = MachineFactory.createMachine("Smelter", player.x, player.y);
-                if (smelter != null) activeMachines.add(smelter);
-                placeTimer = 0.5f;
-            }
-        }
-
-        if (Gdx.input.isKeyPressed(Input.Keys.P) && placeTimer <= 0) {
-            if (player.hasResources(BlockType.IRON_ORE, 20)) {
-                player.consumeResources(BlockType.IRON_ORE, 20);
-                Machine assembler = MachineFactory.createMachine("Assembler", player.x, player.y);
-                if (assembler != null) activeMachines.add(assembler);
-                placeTimer = 0.5f;
-            }
-        }
-
-        // Assembler Recipe Switch
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-            for (Machine m : activeMachines) {
-                if (m instanceof Assembler) {
-                    Assembler assembler = (Assembler) m;
-                    if (assembler.currentRecipe == Assembler.Recipe.IRON_GEAR) {
-                        assembler.currentRecipe = Assembler.Recipe.COPPER_WIRE;
-                    } else {
-                        assembler.currentRecipe = Assembler.Recipe.IRON_GEAR;
-                    }
-                }
-            }
-        }
-
         // Flight Transition
         if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
             GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
         }
 
-        // Power Grid Algorithm
-        powerTickTimer += delta;
-        if (powerTickTimer >= 0.5f) {
-            powerTickTimer = 0f;
-            List<Machine> poweredQueue = new ArrayList<>();
-
-            for (Machine m : activeMachines) {
-                m.isPowered = false;
-                if (m instanceof CoalGenerator && ((CoalGenerator)m).isGenerating()) {
-                    m.isPowered = true;
-                    poweredQueue.add(m);
-                }
+        // Power Grid: CoalGenerators self-power; all other machines check adjacency in their own update()
+        for (Machine m : activeMachines) {
+            if (m instanceof CoalGenerator) {
+                m.isPowered = ((CoalGenerator) m).isActive();
             }
-
-            int head = 0;
-            while (head < poweredQueue.size()) {
-                Machine current = poweredQueue.get(head++);
-                for (Machine other : activeMachines) {
-                    if (!other.isPowered && other.isAdjacentTo(current.x, current.y, current.width, current.height)) {
-                        other.isPowered = true;
-                        poweredQueue.add(other);
-                    }
-                }
-            }
+            // Non-generator machines set their own isPowered in update() via hasAdjacentPower()
         }
 
-        // Machine Update + Gravity
+        // Machine Update (no gravity — machines are static grid objects)
         for (Machine machine : activeMachines) {
             machine.update(delta, this);
-            machine.y += Player.GRAVITY * delta * delta * 60;
-            for (Block block : activeBlocks) {
-                if (block.active &&
-                    machine.x < block.bounds.x + block.bounds.width &&
-                    machine.x + machine.width > block.bounds.x &&
-                    machine.y < block.bounds.y + block.bounds.height &&
-                    machine.y + machine.height > block.bounds.y) {
-                    if (Player.GRAVITY < 0) {
-                        machine.y = block.bounds.y + block.bounds.height;
-                    }
-                    break;
-                }
-            }
         }
 
         // Camera
@@ -419,20 +349,60 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Render Machines
+        // Render Machines — distinct colors per type
         for (Machine machine : activeMachines) {
-            if (machine instanceof Smelter) {
-                if (machine.isPowered) shapeRenderer.setColor(1f, 0.6f, 0f, 1f);
-                else shapeRenderer.setColor(0.5f, 0.3f, 0f, 1f);
-            } else if (machine instanceof Assembler) {
-                if (machine.isPowered) shapeRenderer.setColor(0f, 1f, 1f, 1f);
-                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 1f);
-            } else {
-                if (machine.isPowered) shapeRenderer.setColor(1f, 1f, 0f, 1f);
-                else shapeRenderer.setColor(0.5f, 0f, 0f, 1f);
+            String type = machine.getMachineType();
+            Color machineColor;
+            switch (type) {
+                case "CoalGenerator":
+                    machineColor = machine.isPowered ? new Color(1f, 0.4f, 0.1f, 1f) : new Color(0.4f, 0.15f, 0.05f, 1f);
+                    break;
+                case "IronSmelter":
+                    machineColor = machine.isPowered ? new Color(1f, 0.65f, 0.2f, 1f) : new Color(0.45f, 0.28f, 0.1f, 1f);
+                    break;
+                case "CopperSmelter":
+                    machineColor = machine.isPowered ? new Color(0.95f, 0.55f, 0.25f, 1f) : new Color(0.42f, 0.24f, 0.12f, 1f);
+                    break;
+                case "GearAssembler":
+                    machineColor = machine.isPowered ? new Color(0.2f, 0.95f, 0.9f, 1f) : new Color(0.08f, 0.45f, 0.42f, 1f);
+                    break;
+                case "WireAssembler":
+                    machineColor = machine.isPowered ? new Color(0.8f, 0.4f, 1f, 1f) : new Color(0.35f, 0.15f, 0.5f, 1f);
+                    break;
+                case "AutoMiner":
+                    machineColor = machine.isPowered ? new Color(1f, 1f, 0.3f, 1f) : new Color(0.5f, 0.15f, 0.15f, 1f);
+                    break;
+                default:
+                    machineColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+                    break;
             }
+            shapeRenderer.setColor(machineColor);
             shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
+            
+            // Border
+            shapeRenderer.set(ShapeRenderer.ShapeType.Line);
+            if (machine.isPowered) shapeRenderer.setColor(Color.WHITE);
+            else shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f);
+            shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
+            shapeRenderer.set(ShapeRenderer.ShapeType.Filled);
         }
+
+        shapeRenderer.end();
+
+        // Render machine symbols using SpriteBatch
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        for (Machine machine : activeMachines) {
+            String symbol = machine.getSymbol();
+            // Center the text roughly. Each character is roughly 0.2-0.3 units wide in this world scale.
+            // machineFont is generated with size 12, we need to scale it down to fit in 1x1 world units.
+            machineFont.getData().setScale(0.02f); 
+            machineFont.setColor(machine.isPowered ? Color.WHITE : Color.GRAY);
+            machineFont.draw(batch, symbol, machine.x + 0.5f - 0.15f, machine.y + 0.65f);
+        }
+        batch.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         // Render LanderHub
         shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
@@ -472,6 +442,7 @@ public class PlayScreen implements Screen {
 
     @Override
     public void dispose() {
+        if (machineFont != null) machineFont.dispose();
         shapeRenderer.dispose();
         batch.dispose();
         hud.dispose();
@@ -487,12 +458,41 @@ public class PlayScreen implements Screen {
 
         if (active == ItemType.DECONSTRUCT_TOOL) {
             deconstructAt(gx, gy);
+        } else if (Player.isMachineItem(active)) {
+            // Place a machine from machine inventory
+            placeMachineAt(gx, gy, active);
         } else {
             // Try to place a block
             BlockType bt = Player.itemTypeToBlockType(active);
             if (bt != null) {
                 placeBlockAt(gx, gy, bt);
             }
+        }
+    }
+
+    private void placeMachineAt(float gx, float gy, ItemType machineType) {
+        if (!player.consumeMachineItem(machineType)) return;
+
+        // Check cell not occupied
+        for (Block b : activeBlocks) {
+            if (b.active && Math.abs(b.x - gx) < 0.01f && Math.abs(b.y - gy) < 0.01f) {
+                player.addMachineToHotbar(machineType); // refund
+                return;
+            }
+        }
+        for (Machine m : activeMachines) {
+            if (Math.abs(m.x - gx) < 0.01f && Math.abs(m.y - gy) < 0.01f) {
+                player.addMachineToHotbar(machineType); // refund
+                return;
+            }
+        }
+
+        String key = Player.getMachineFactoryKey(machineType);
+        Machine machine = MachineFactory.createMachine(key, gx, gy);
+        if (machine != null) {
+            activeMachines.add(machine);
+        } else {
+            player.addMachineToHotbar(machineType); // refund on failure
         }
     }
 
@@ -539,14 +539,31 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Try removing a machine
+        // Try removing a machine — return it to machineInventory
         Iterator<Machine> it = activeMachines.iterator();
         while (it.hasNext()) {
             Machine m = it.next();
             if (Math.abs(m.x - gx) < 0.01f && Math.abs(m.y - gy) < 0.01f) {
+                ItemType machineItem = machineTypeToItemType(m.getMachineType());
+                if (machineItem != null) {
+                    player.addMachineToHotbar(machineItem);
+                }
                 it.remove();
                 return;
             }
+        }
+    }
+
+    /** Maps a Machine's type string back to an ItemType for inventory return. */
+    private ItemType machineTypeToItemType(String type) {
+        switch (type) {
+            case "AutoMiner":      return ItemType.AUTO_MINER;
+            case "CoalGenerator":  return ItemType.COAL_GENERATOR;
+            case "IronSmelter":    return ItemType.IRON_SMELTER;
+            case "CopperSmelter":  return ItemType.COPPER_SMELTER;
+            case "GearAssembler":  return ItemType.GEAR_ASSEMBLER;
+            case "WireAssembler":  return ItemType.WIRE_ASSEMBLER;
+            default:               return null;
         }
     }
 }
