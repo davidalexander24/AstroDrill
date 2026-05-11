@@ -3,6 +3,8 @@ package com.david.astrodrill.entity;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.math.Rectangle;
+import com.david.astrodrill.GameManager;
+import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.observer.InventoryObserver;
 
 import java.util.ArrayList;
@@ -31,12 +33,24 @@ public class Player {
     /** Set by PlayScreen each frame — true when inside the LanderHub safe zone. */
     public boolean isInHubZone = false;
 
+    // ── Hotbar System ────────────────────────────────────────────────────
+    public static final int HOTBAR_SLOTS = 9;
+
+    /** The 9-slot hotbar. null means the slot is empty. Dynamically populated. */
+    public final ItemType[] hotbar = new ItemType[HOTBAR_SLOTS];
+
+    /** Currently selected hotbar slot (0-based). */
+    public int activeSlot = 0;
+
     // Physics constants
     public static final float GRAVITY = -15f;
     public static final float MAX_FALL_SPEED = -10f;
     public static final float MAX_RISE_SPEED = 8f;
     public static final float JETPACK_THRUST = 25f;
     public static final float JETPACK_BATTERY_DRAIN = 10f;
+
+    // ── Interaction Radius ───────────────────────────────────────────────
+    public static final float INTERACT_RADIUS = 6f;
 
     public Player(float x, float y, float width, float height) {
         this.x = x;
@@ -51,6 +65,150 @@ public class Player {
         this.spawnY = y;
         this.inventory = new HashMap<>();
         this.observers = new ArrayList<>();
+    }
+
+    /**
+     * Rebuilds the hotbar dynamically based on the player's personal inventory
+     * and the global vault. Only items with count > 0 that are placeable appear.
+     * The Deconstruct Tool is always in the last slot.
+     */
+    public void rebuildHotbar() {
+        // Clear all slots
+        for (int i = 0; i < HOTBAR_SLOTS; i++) {
+            hotbar[i] = null;
+        }
+
+        int slotIdx = 0;
+        GameManager gm = GameManager.getInstance();
+
+        // Placeable blocks from personal inventory (Dirt, Stone, etc.)
+        Block.BlockType[] placeableBlocks = {
+            Block.BlockType.DIRT, Block.BlockType.STONE,
+            Block.BlockType.COAL_ORE, Block.BlockType.COPPER_ORE, Block.BlockType.IRON_ORE,
+            Block.BlockType.BASALT, Block.BlockType.OBSIDIAN
+        };
+
+        for (Block.BlockType bt : placeableBlocks) {
+            if (slotIdx >= HOTBAR_SLOTS - 1) break; // reserve last slot for deconstruct
+            
+            ItemType it = blockTypeToItemType(bt);
+            if (it == null) continue;
+
+            int invCount = inventory.getOrDefault(bt, 0);
+            int vaultCount = gm.getItemCount(it);
+            
+            if (invCount > 0 || vaultCount > 0) {
+                hotbar[slotIdx++] = it;
+            }
+        }
+
+        // Deconstruct tool always last
+        hotbar[HOTBAR_SLOTS - 1] = ItemType.DECONSTRUCT_TOOL;
+
+        // Clamp active slot if it went out of range
+        if (activeSlot >= HOTBAR_SLOTS) activeSlot = HOTBAR_SLOTS - 1;
+    }
+
+    /** Maps a BlockType to the corresponding placeable ItemType. */
+    public static ItemType blockTypeToItemType(Block.BlockType bt) {
+        switch (bt) {
+            case DIRT:  return ItemType.DIRT;
+            case STONE: return ItemType.STONE;
+            default:    return null;
+        }
+    }
+
+    /** Maps a placeable ItemType back to a BlockType for world placement. */
+    public static Block.BlockType itemTypeToBlockType(ItemType it) {
+        if (it == null) return null;
+        switch (it) {
+            case DIRT:  return Block.BlockType.DIRT;
+            case STONE: return Block.BlockType.STONE;
+            default:    return null;
+        }
+    }
+
+    /** Returns the ItemType in the currently active hotbar slot, or null. */
+    public ItemType getActiveHotbarItem() {
+        return hotbar[activeSlot];
+    }
+
+    /** Cycles the active slot forward or backward, wrapping around. */
+    public void scrollHotbar(int direction) {
+        activeSlot = ((activeSlot + direction) % HOTBAR_SLOTS + HOTBAR_SLOTS) % HOTBAR_SLOTS;
+    }
+
+    /** Directly set the active slot (0-based). */
+    public void setActiveSlot(int slot) {
+        if (slot >= 0 && slot < HOTBAR_SLOTS) {
+            activeSlot = slot;
+        }
+    }
+
+    /**
+     * Transfers all items from the player's personal inventory into the
+     * GameManager global vault. Returns a summary string for the HUD popup.
+     */
+    public String bankInventoryToVault() {
+        if (inventory.isEmpty()) return null;
+
+        GameManager gm = GameManager.getInstance();
+        StringBuilder banked = new StringBuilder();
+        int totalBanked = 0;
+
+        for (Map.Entry<Block.BlockType, Integer> entry : inventory.entrySet()) {
+            int count = entry.getValue();
+            if (count <= 0) continue;
+
+            ItemType vaultType = blockTypeToRawItemType(entry.getKey());
+            if (vaultType != null) {
+                gm.addItems(vaultType, count);
+                if (banked.length() > 0) banked.append(", ");
+                banked.append(count).append("x ").append(formatName(entry.getKey().name()));
+                totalBanked += count;
+            }
+        }
+
+        inventory.clear();
+        notifyObservers();
+
+        if (totalBanked > 0) {
+            return "Banked: " + banked.toString();
+        }
+        return null;
+    }
+
+    /** Maps a mined BlockType to the corresponding raw vault ItemType. */
+    private ItemType blockTypeToRawItemType(Block.BlockType bt) {
+        switch (bt) {
+            case IRON_ORE:    return ItemType.RAW_IRON;
+            case COPPER_ORE:  return ItemType.RAW_COPPER;
+            case COAL_ORE:    return ItemType.RAW_COAL;
+            case DIRT:        return ItemType.DIRT;
+            case STONE:       return ItemType.STONE;
+            default:          return null;
+        }
+    }
+
+    private String formatName(String enumName) {
+        String[] parts = enumName.split("_");
+        StringBuilder sb = new StringBuilder();
+        for (String p : parts) {
+            sb.append(p.charAt(0)).append(p.substring(1).toLowerCase()).append(" ");
+        }
+        return sb.toString().trim();
+    }
+
+    /** Returns the count of a given BlockType in the player's personal inventory. */
+    public int getInventoryCount(Block.BlockType type) {
+        return inventory.getOrDefault(type, 0);
+    }
+
+    /** Returns the total count of a given BlockType from both inventory and vault. */
+    public int getTotalResourceCount(Block.BlockType type) {
+        int inv = inventory.getOrDefault(type, 0);
+        int vault = GameManager.getInstance().getItemCount(blockTypeToItemType(type));
+        return inv + vault;
     }
 
     public void addObserver(InventoryObserver observer) {
@@ -70,22 +228,35 @@ public class Player {
     }
 
     public boolean hasResources(Block.BlockType type, int amount) {
-        return inventory.getOrDefault(type, 0) >= amount;
+        int invCount = inventory.getOrDefault(type, 0);
+        ItemType it = blockTypeToItemType(type);
+        int vaultCount = (it != null) ? GameManager.getInstance().getItemCount(it) : 0;
+        return (invCount + vaultCount) >= amount;
     }
 
     public void consumeResources(Block.BlockType type, int amount) {
-        if (hasResources(type, amount)) {
-            int current = inventory.get(type);
-            inventory.put(type, current - amount);
-            notifyObservers();
+        if (!hasResources(type, amount)) return;
+
+        int invCount = inventory.getOrDefault(type, 0);
+        if (invCount >= amount) {
+            inventory.put(type, invCount - amount);
+        } else {
+            // Consume all from inventory, then the rest from vault
+            inventory.put(type, 0);
+            int remaining = amount - invCount;
+            ItemType it = blockTypeToItemType(type);
+            if (it != null) {
+                GameManager.getInstance().consumeItems(it, remaining);
+            }
         }
+        notifyObservers();
     }
 
     public void update(float delta) {
         // Apply gravity
         velocityY += GRAVITY * delta;
 
-        // Jetpack: W / UP applies upward thrust
+        // Jetpack
         boolean jetting = false;
         if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
             if (currentBattery > 0) {
@@ -94,13 +265,8 @@ public class Player {
             }
         }
 
-        // Clamp vertical velocity to prevent tunnelling through blocks
-        if (velocityY < MAX_FALL_SPEED) {
-            velocityY = MAX_FALL_SPEED;
-        }
-        if (velocityY > MAX_RISE_SPEED) {
-            velocityY = MAX_RISE_SPEED;
-        }
+        if (velocityY < MAX_FALL_SPEED) velocityY = MAX_FALL_SPEED;
+        if (velocityY > MAX_RISE_SPEED) velocityY = MAX_RISE_SPEED;
 
         // Horizontal input
         velocityX = 0;
@@ -123,10 +289,7 @@ public class Player {
         }
 
         if (currentBattery < 0) currentBattery = 0;
-
-        if (currentBattery <= 0) {
-            respawn();
-        }
+        if (currentBattery <= 0) respawn();
     }
 
     public void respawn() {
@@ -139,22 +302,11 @@ public class Player {
         notifyObservers();
     }
 
-    /**
-     * Incrementally recharges the battery by the given rate * delta.
-     * Called by PlayScreen when the player is inside the Hub safe zone.
-     */
     public void rechargeBattery(float rate, float delta) {
         currentBattery += rate * delta;
-        if (currentBattery > maxBattery) {
-            currentBattery = maxBattery;
-        }
+        if (currentBattery > maxBattery) currentBattery = maxBattery;
     }
 
-    public float getCenterX() {
-        return x + width / 2f;
-    }
-
-    public float getCenterY() {
-        return y + height / 2f;
-    }
+    public float getCenterX() { return x + width / 2f; }
+    public float getCenterY() { return y + height / 2f; }
 }

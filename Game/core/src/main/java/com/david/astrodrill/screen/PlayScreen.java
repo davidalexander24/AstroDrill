@@ -2,16 +2,20 @@ package com.david.astrodrill.screen;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
 import com.david.astrodrill.entity.Block;
 import com.david.astrodrill.entity.Block.BlockType;
 import com.david.astrodrill.entity.Player;
+import com.david.astrodrill.item.ItemType;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.david.astrodrill.ui.Hud;
 import com.david.astrodrill.machine.Machine;
@@ -22,6 +26,7 @@ import com.david.astrodrill.machine.CoalGenerator;
 import com.david.astrodrill.machine.Smelter;
 import com.david.astrodrill.machine.Assembler;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class PlayScreen implements Screen {
@@ -38,7 +43,12 @@ public class PlayScreen implements Screen {
     private LanderHub landerHub;
     private float powerTickTimer = 0f;
     private InputMultiplexer inputMultiplexer;
-    
+    private float clickCooldown = 0f;
+    private Vector3 pendingClick = null;
+
+    // Auto-banking: only bank once per zone entry
+    private boolean hasbankedThisEntry = false;
+
     private final Pool<Block> blockPool = new Pool<Block>() {
         @Override
         protected Block newObject() {
@@ -50,9 +60,8 @@ public class PlayScreen implements Screen {
     private static final int ROWS = 300;
     private static final float BLOCK_SIZE = 1f;
 
-    // LanderHub foundation columns (7 blocks wide centered under hub)
     private static final int HUB_COL_START = 47;
-    private static final int HUB_COL_END = 53; // inclusive
+    private static final int HUB_COL_END = 53;
     private static final int HUB_FOUNDATION_DEPTH = 0;
 
     @Override
@@ -61,118 +70,97 @@ public class PlayScreen implements Screen {
         shapeRenderer = new ShapeRenderer();
         batch = new SpriteBatch();
         hud = new Hud(batch);
-        
-        generateWorld();
-        
-        // Spawn LanderHub resting on top of the dirt at the center (centered on column 50).
-        // Hub width is 3, so it spans columns 49, 50, 51.
-        landerHub = new LanderHub(49f, 1f, 3f, 3f);
 
-        // Spawn player 1 block to the right of the hub
+        generateWorld();
+
+        landerHub = new LanderHub(49f, 1f, 3f, 3f);
         player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
         hud.setPlayer(player);
-        
+
         GameManager.getInstance().addObserver(hud);
-        
-        // Set up InputMultiplexer so the HUD Stage captures mouse clicks
-        // while keyboard input still reaches the game loop via Gdx.input.isKeyPressed()
+
         inputMultiplexer = new InputMultiplexer();
-        inputMultiplexer.addProcessor(hud.stage); // Stage gets first priority for clicks
+        inputMultiplexer.addProcessor(hud.stage);
+        inputMultiplexer.addProcessor(new InputAdapter() {
+            @Override
+            public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+                if (button == Input.Buttons.LEFT) {
+                    Vector3 world = camera.unproject(new Vector3(screenX, screenY, 0));
+                    float gx = MathUtils.floor(world.x / BLOCK_SIZE) * BLOCK_SIZE;
+                    float gy = MathUtils.floor(world.y / BLOCK_SIZE) * BLOCK_SIZE;
+                    pendingClick = new Vector3(gx, gy, 0);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                player.scrollHotbar(amountY > 0 ? 1 : -1);
+                return true;
+            }
+        });
         Gdx.input.setInputProcessor(inputMultiplexer);
     }
-    
+
     private void generateWorld() {
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
                 Block block = blockPool.obtain();
-                
                 BlockType type;
 
-                // LanderHub bedrock foundation: 7 blocks wide at row 0
                 if (c >= HUB_COL_START && c <= HUB_COL_END && r <= HUB_FOUNDATION_DEPTH) {
                     type = BlockType.BEDROCK;
-                }
-                // Row 0: flat dirt surface
-                else if (r == 0) {
+                } else if (r == 0) {
                     type = BlockType.DIRT;
-                }
-                // Crust Layer (depth 1-49)
-                else if (r < 50) {
+                } else if (r < 50) {
                     float chance = (float) Math.random();
-                    if (chance < 0.03f) {
-                        type = BlockType.IRON_ORE;
-                    } else if (chance < 0.08f) {
-                        type = BlockType.COPPER_ORE;
-                    } else if (chance < 0.15f) {
-                        type = BlockType.COAL_ORE;
-                    } else if (chance < 0.30f) {
-                        type = BlockType.STONE;
-                    } else {
-                        type = BlockType.DIRT;
-                    }
-                }
-                // Mantle Layer (depth 50-149)
-                else if (r < 150) {
+                    if (chance < 0.03f) type = BlockType.IRON_ORE;
+                    else if (chance < 0.08f) type = BlockType.COPPER_ORE;
+                    else if (chance < 0.15f) type = BlockType.COAL_ORE;
+                    else if (chance < 0.30f) type = BlockType.STONE;
+                    else type = BlockType.DIRT;
+                } else if (r < 150) {
                     float chance = (float) Math.random();
-                    if (chance < 0.04f) {
-                        type = BlockType.GOLD_ORE;
-                    } else if (chance < 0.10f) {
-                        type = BlockType.SILICON_ORE;
-                    } else if (chance < 0.25f) {
-                        type = BlockType.STONE;
-                    } else {
-                        type = BlockType.BASALT;
-                    }
-                }
-                // Core Layer (depth 150-299)
-                else {
+                    if (chance < 0.04f) type = BlockType.GOLD_ORE;
+                    else if (chance < 0.10f) type = BlockType.SILICON_ORE;
+                    else if (chance < 0.25f) type = BlockType.STONE;
+                    else type = BlockType.BASALT;
+                } else {
                     float chance = (float) Math.random();
-                    if (chance < 0.15f) {
-                        type = BlockType.URANIUM_ORE;
-                    } else {
-                        type = BlockType.OBSIDIAN;
-                    }
+                    if (chance < 0.15f) type = BlockType.URANIUM_ORE;
+                    else type = BlockType.OBSIDIAN;
                 }
-                
-                // Blocks are generated going downwards
+
                 block.init(c * BLOCK_SIZE, -r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, type);
-                
                 activeBlocks.add(block);
             }
         }
     }
 
-    /**
-     * Checks whether any active machine is resting on the given block.
-     * Used to protect load-bearing blocks from being mined.
-     */
     private boolean isMachineSupportedBy(Block block) {
         for (Machine machine : activeMachines) {
-            // A machine sits on this block if its bottom is at or near the block's top
-            // and they overlap horizontally
             boolean horizontalOverlap = machine.x < block.bounds.x + block.bounds.width
                 && machine.x + machine.width > block.bounds.x;
             boolean verticalSupport = Math.abs(machine.y - (block.bounds.y + block.bounds.height)) < 0.15f;
-            if (horizontalOverlap && verticalSupport) {
-                return true;
-            }
+            if (horizontalOverlap && verticalSupport) return true;
         }
         return false;
     }
 
+    /**
+     * Mines a block at (x,y). Used by player drill and AutoMiner.
+     * NEVER breaks player-placed blocks or bedrock.
+     */
     public Block.BlockType mineBlockAt(float x, float y) {
         for (int i = 0; i < activeBlocks.size; i++) {
             Block block = activeBlocks.get(i);
             if (block.active && block.bounds.contains(x, y)) {
-                // Prevent mining indestructible blocks (BEDROCK)
-                if (!block.isDestructible) {
-                    return null;
-                }
-                // Prevent mining blocks that support a machine
-                if (isMachineSupportedBy(block)) {
-                    return null;
-                }
+                if (!block.isDestructible) return null;
+                if (block.isPlayerPlaced) return null;   // drill/autominer cannot break player-placed
+                if (isMachineSupportedBy(block)) return null;
+
                 Block.BlockType type = block.type;
                 activeBlocks.removeIndex(i);
                 blockPool.free(block);
@@ -189,22 +177,53 @@ public class PlayScreen implements Screen {
 
         player.update(delta);
 
+        // ── Hotbar Slot Selection (Number Keys 1-9) ──────────────────────
+        for (int i = 0; i < 9; i++) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
+                player.setActiveSlot(i);
+            }
+        }
+
+        // ── Sandbox Click: Placement / Deconstruction (with radius check) ──
+        clickCooldown -= delta;
+        if (pendingClick != null && clickCooldown <= 0) {
+            float dx = pendingClick.x + 0.5f - player.getCenterX();
+            float dy = pendingClick.y + 0.5f - player.getCenterY();
+            float distSq = dx * dx + dy * dy;
+            if (distSq <= Player.INTERACT_RADIUS * Player.INTERACT_RADIUS) {
+                handleWorldClick(pendingClick.x, pendingClick.y);
+            }
+            pendingClick = null;
+            clickCooldown = 0.15f;
+        } else {
+            pendingClick = null;
+        }
+
         // ── Hub Proximity Detection & Recharge ───────────────────────────
         boolean wasInZone = player.isInHubZone;
         player.isInHubZone = landerHub.isInSafeZone(player.getCenterX(), player.getCenterY());
 
         if (player.isInHubZone) {
-            // Incremental battery recharge while inside the safe zone
             player.rechargeBattery(LanderHub.RECHARGE_RATE, delta);
+
+            // Auto-bank inventory on zone entry
+            if (!hasbankedThisEntry) {
+                String bankedMsg = player.bankInventoryToVault();
+                if (bankedMsg != null) {
+                    hud.showBankingPopup(bankedMsg);
+                }
+                hasbankedThisEntry = true;
+            }
+        } else {
+            hasbankedThisEntry = false;
         }
 
-        // Toggle the Hub Terminal UI on enter / exit
         hud.setHubPanelVisible(player.isInHubZone);
 
         // X-axis movement and collision
         player.x += player.velocityX * delta;
         player.bounds.x = player.x;
-        
+
         boolean blockedX = false;
         for (Block block : activeBlocks) {
             if (block.active && player.bounds.overlaps(block.bounds)) {
@@ -223,11 +242,9 @@ public class PlayScreen implements Screen {
         // Y-axis movement and collision
         player.y += player.velocityY * delta;
         player.bounds.y = player.y;
-        
-        boolean blockedY = false;
+
         for (Block block : activeBlocks) {
             if (block.active && player.bounds.overlaps(block.bounds)) {
-                blockedY = true;
                 if (player.velocityY < 0) {
                     player.y = block.bounds.y + block.bounds.height;
                 } else if (player.velocityY > 0) {
@@ -239,10 +256,11 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Mining logic
+        // Mining logic (drill never breaks player-placed blocks — enforced in mineBlockAt)
         digTimer -= delta;
         if (digTimer <= 0) {
             Block.BlockType mined = null;
+
             if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
                 mined = mineBlockAt(player.x + player.width / 2, player.y - 0.1f);
             } else if ((Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) && blockedX) {
@@ -264,46 +282,38 @@ public class PlayScreen implements Screen {
                 player.consumeResources(BlockType.IRON_ORE, 5);
                 player.consumeResources(BlockType.COPPER_ORE, 5);
                 Machine miner = MachineFactory.createMachine("AutoMiner", player.x, player.y);
-                if (miner != null) {
-                    activeMachines.add(miner);
-                }
+                if (miner != null) activeMachines.add(miner);
                 placeTimer = 0.5f;
             }
         }
-        
+
         if (Gdx.input.isKeyPressed(Input.Keys.G) && placeTimer <= 0) {
             if (player.hasResources(BlockType.IRON_ORE, 10)) {
                 player.consumeResources(BlockType.IRON_ORE, 10);
                 Machine gen = MachineFactory.createMachine("CoalGenerator", player.x, player.y);
-                if (gen != null) {
-                    activeMachines.add(gen);
-                }
+                if (gen != null) activeMachines.add(gen);
                 placeTimer = 0.5f;
             }
         }
-        
+
         if (Gdx.input.isKeyPressed(Input.Keys.O) && placeTimer <= 0) {
             if (player.hasResources(BlockType.IRON_ORE, 15)) {
                 player.consumeResources(BlockType.IRON_ORE, 15);
                 Machine smelter = MachineFactory.createMachine("Smelter", player.x, player.y);
-                if (smelter != null) {
-                    activeMachines.add(smelter);
-                }
+                if (smelter != null) activeMachines.add(smelter);
                 placeTimer = 0.5f;
             }
         }
-        
+
         if (Gdx.input.isKeyPressed(Input.Keys.P) && placeTimer <= 0) {
             if (player.hasResources(BlockType.IRON_ORE, 20)) {
                 player.consumeResources(BlockType.IRON_ORE, 20);
                 Machine assembler = MachineFactory.createMachine("Assembler", player.x, player.y);
-                if (assembler != null) {
-                    activeMachines.add(assembler);
-                }
+                if (assembler != null) activeMachines.add(assembler);
                 placeTimer = 0.5f;
             }
         }
-        
+
         // Assembler Recipe Switch
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             for (Machine m : activeMachines) {
@@ -318,7 +328,7 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Flight Transition Logic
+        // Flight Transition
         if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
             GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
         }
@@ -328,17 +338,15 @@ public class PlayScreen implements Screen {
         if (powerTickTimer >= 0.5f) {
             powerTickTimer = 0f;
             List<Machine> poweredQueue = new ArrayList<>();
-            
+
             for (Machine m : activeMachines) {
                 m.isPowered = false;
-                if (m instanceof CoalGenerator) {
-                    if (((CoalGenerator)m).isGenerating()) {
-                        m.isPowered = true;
-                        poweredQueue.add(m);
-                    }
+                if (m instanceof CoalGenerator && ((CoalGenerator)m).isGenerating()) {
+                    m.isPowered = true;
+                    poweredQueue.add(m);
                 }
             }
-            
+
             int head = 0;
             while (head < poweredQueue.size()) {
                 Machine current = poweredQueue.get(head++);
@@ -351,20 +359,16 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Machine Update Logic
+        // Machine Update + Gravity
         for (Machine machine : activeMachines) {
             machine.update(delta, this);
-            
-            // Basic gravity and collision for machines
-            machine.y += Player.GRAVITY * delta * delta * 60; // simple fallback
-            boolean machineBlockedY = false;
+            machine.y += Player.GRAVITY * delta * delta * 60;
             for (Block block : activeBlocks) {
-                if (block.active && 
+                if (block.active &&
                     machine.x < block.bounds.x + block.bounds.width &&
                     machine.x + machine.width > block.bounds.x &&
                     machine.y < block.bounds.y + block.bounds.height &&
                     machine.y + machine.height > block.bounds.y) {
-                    machineBlockedY = true;
                     if (Player.GRAVITY < 0) {
                         machine.y = block.bounds.y + block.bounds.height;
                     }
@@ -373,101 +377,82 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Update camera to follow player, clamped to world bounds
+        // Camera
         camera.position.x = player.x;
         camera.position.y = player.y;
-
-        // Clamp camera X so it doesn't pan past the world edges
         float halfViewW = camera.viewportWidth / 2f;
         float worldWidth = COLS * BLOCK_SIZE;
         if (camera.position.x < halfViewW) camera.position.x = halfViewW;
         if (camera.position.x > worldWidth - halfViewW) camera.position.x = worldWidth - halfViewW;
-
         camera.update();
         shapeRenderer.setProjectionMatrix(camera.combined);
-        
+
+        // ── Rendering ────────────────────────────────────────────────────
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        
+
         for (Block block : activeBlocks) {
             if (block.active) {
                 switch(block.type) {
-                    case DIRT:
-                        shapeRenderer.setColor(0.54f, 0.27f, 0.07f, 1f); // Brown
-                        break;
-                    case STONE:
-                        shapeRenderer.setColor(0.5f, 0.5f, 0.5f, 1f); // Gray
-                        break;
-                    case COPPER_ORE:
-                        shapeRenderer.setColor(0.8f, 0.4f, 0.0f, 1f); // Orange
-                        break;
-                    case IRON_ORE:
-                        shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); // Silver
-                        break;
-                    case COAL_ORE:
-                        shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); // Charcoal
-                        break;
-                    case BASALT:
-                        shapeRenderer.setColor(0.25f, 0.25f, 0.25f, 1f); // Dark Gray
-                        break;
-                    case GOLD_ORE:
-                        shapeRenderer.setColor(1f, 0.84f, 0f, 1f); // Bright Yellow
-                        break;
-                    case SILICON_ORE:
-                        shapeRenderer.setColor(0.6f, 0.8f, 0.9f, 1f); // Light Blue-Gray
-                        break;
-                    case URANIUM_ORE:
-                        shapeRenderer.setColor(0.2f, 1f, 0.2f, 1f); // Neon Green
-                        break;
-                    case OBSIDIAN:
-                        shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 1f); // Near Black
-                        break;
-                    case BEDROCK:
-                        shapeRenderer.setColor(0.1f, 0.1f, 0.3f, 1f); // Dark Blue
-                        break;
-                    default:
-                        shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); // Default
-                        break;
+                    case DIRT:        shapeRenderer.setColor(0.54f, 0.27f, 0.07f, 1f); break;
+                    case STONE:       shapeRenderer.setColor(0.5f, 0.5f, 0.5f, 1f); break;
+                    case COPPER_ORE:  shapeRenderer.setColor(0.8f, 0.4f, 0.0f, 1f); break;
+                    case IRON_ORE:    shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); break;
+                    case COAL_ORE:    shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); break;
+                    case BASALT:      shapeRenderer.setColor(0.25f, 0.25f, 0.25f, 1f); break;
+                    case GOLD_ORE:    shapeRenderer.setColor(1f, 0.84f, 0f, 1f); break;
+                    case SILICON_ORE: shapeRenderer.setColor(0.6f, 0.8f, 0.9f, 1f); break;
+                    case URANIUM_ORE: shapeRenderer.setColor(0.2f, 1f, 0.2f, 1f); break;
+                    case OBSIDIAN:    shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 1f); break;
+                    case BEDROCK:     shapeRenderer.setColor(0.1f, 0.1f, 0.3f, 1f); break;
+                    default:          shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); break;
+                }
+                // Player-placed blocks get a slight tint (brighter) to distinguish them
+                if (block.isPlayerPlaced) {
+                    shapeRenderer.setColor(
+                        Math.min(1f, shapeRenderer.getColor().r + 0.15f),
+                        Math.min(1f, shapeRenderer.getColor().g + 0.15f),
+                        Math.min(1f, shapeRenderer.getColor().b + 0.15f),
+                        1f
+                    );
                 }
                 shapeRenderer.rect(block.x, block.y, block.width, block.height);
             }
         }
-        
+
         // Render Machines
         for (Machine machine : activeMachines) {
             if (machine instanceof Smelter) {
-                if (machine.isPowered) shapeRenderer.setColor(1f, 0.6f, 0f, 1f); // Bright Orange
-                else shapeRenderer.setColor(0.5f, 0.3f, 0f, 1f); // Dark Orange
+                if (machine.isPowered) shapeRenderer.setColor(1f, 0.6f, 0f, 1f);
+                else shapeRenderer.setColor(0.5f, 0.3f, 0f, 1f);
             } else if (machine instanceof Assembler) {
-                if (machine.isPowered) shapeRenderer.setColor(0f, 1f, 1f, 1f); // Bright Cyan
-                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 1f); // Dark Cyan
+                if (machine.isPowered) shapeRenderer.setColor(0f, 1f, 1f, 1f);
+                else shapeRenderer.setColor(0f, 0.5f, 0.5f, 1f);
             } else {
-                if (machine.isPowered) {
-                    shapeRenderer.setColor(1f, 1f, 0f, 1f); // Bright Yellow
-                } else {
-                    shapeRenderer.setColor(0.5f, 0f, 0f, 1f); // Dark Red
-                }
+                if (machine.isPowered) shapeRenderer.setColor(1f, 1f, 0f, 1f);
+                else shapeRenderer.setColor(0.5f, 0f, 0f, 1f);
             }
             shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
         }
-        
+
         // Render LanderHub
-        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f); // Massive Gray rectangle
+        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
         shapeRenderer.rect(landerHub.x, landerHub.y, landerHub.width, landerHub.height);
-        
+
         // Render Player
-        shapeRenderer.setColor(0f, 0.5f, 1f, 1f); // Bright Blue
+        shapeRenderer.setColor(0f, 0.5f, 1f, 1f);
         shapeRenderer.rect(player.x, player.y, player.width, player.height);
-        
+
         shapeRenderer.end();
 
+        // HUD
         hud.updateBattery();
+        hud.updateHotbar(delta);
         hud.stage.act(delta);
         hud.stage.draw();
     }
 
     @Override
     public void resize(int width, int height) {
-        // Show ~30 blocks across for readable scale even on the 100-wide grid
         float viewportWidth = 30f * BLOCK_SIZE;
         float viewportHeight = viewportWidth * ((float) height / width);
         camera.setToOrtho(false, viewportWidth, viewportHeight);
@@ -481,26 +466,87 @@ public class PlayScreen implements Screen {
         hud.stage.getViewport().update(width, height, true);
     }
 
-    @Override
-    public void pause() {
-    }
-
-    @Override
-    public void resume() {
-    }
-
-    @Override
-    public void hide() {
-    }
+    @Override public void pause() {}
+    @Override public void resume() {}
+    @Override public void hide() {}
 
     @Override
     public void dispose() {
         shapeRenderer.dispose();
         batch.dispose();
         hud.dispose();
-        for (Block block : activeBlocks) {
-            blockPool.free(block);
-        }
+        for (Block block : activeBlocks) blockPool.free(block);
         activeBlocks.clear();
+    }
+
+    // ── Sandbox Construction Helpers ──────────────────────────────────────
+
+    private void handleWorldClick(float gx, float gy) {
+        ItemType active = player.getActiveHotbarItem();
+        if (active == null) return;
+
+        if (active == ItemType.DECONSTRUCT_TOOL) {
+            deconstructAt(gx, gy);
+        } else {
+            // Try to place a block
+            BlockType bt = Player.itemTypeToBlockType(active);
+            if (bt != null) {
+                placeBlockAt(gx, gy, bt);
+            }
+        }
+    }
+
+    private void placeBlockAt(float gx, float gy, BlockType type) {
+        // Must have the block in inventory
+        if (!player.hasResources(type, 1)) return;
+
+        // Prevent placing on bedrock foundation
+        int col = Math.round(gx / BLOCK_SIZE);
+        int row = Math.round(-gy / BLOCK_SIZE);
+        if (col >= HUB_COL_START && col <= HUB_COL_END && row <= HUB_FOUNDATION_DEPTH) return;
+
+        // Check cell not occupied by block
+        for (Block b : activeBlocks) {
+            if (b.active && Math.abs(b.x - gx) < 0.01f && Math.abs(b.y - gy) < 0.01f) return;
+        }
+
+        // Check cell not occupied by machine
+        for (Machine m : activeMachines) {
+            if (Math.abs(m.x - gx) < 0.01f && Math.abs(m.y - gy) < 0.01f) return;
+        }
+
+        player.consumeResources(type, 1);
+        Block block = blockPool.obtain();
+        block.init(gx, gy, BLOCK_SIZE, BLOCK_SIZE, type, true); // isPlayerPlaced = true
+        activeBlocks.add(block);
+    }
+
+    /**
+     * Deconstruct tool: can ONLY break player-placed blocks (and machines).
+     * Never breaks natural terrain or bedrock.
+     */
+    private void deconstructAt(float gx, float gy) {
+        // Try removing a player-placed block
+        for (int i = 0; i < activeBlocks.size; i++) {
+            Block b = activeBlocks.get(i);
+            if (b.active && Math.abs(b.x - gx) < 0.01f && Math.abs(b.y - gy) < 0.01f) {
+                if (!b.isPlayerPlaced) return; // cannot deconstruct natural terrain
+                // Return the block to inventory
+                player.addBlockToInventory(b.type);
+                activeBlocks.removeIndex(i);
+                blockPool.free(b);
+                return;
+            }
+        }
+
+        // Try removing a machine
+        Iterator<Machine> it = activeMachines.iterator();
+        while (it.hasNext()) {
+            Machine m = it.next();
+            if (Math.abs(m.x - gx) < 0.01f && Math.abs(m.y - gy) < 0.01f) {
+                it.remove();
+                return;
+            }
+        }
     }
 }

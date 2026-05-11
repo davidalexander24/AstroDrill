@@ -16,6 +16,10 @@ public class Block implements Poolable {
     public float height;
     public boolean active;
     public boolean isDestructible = true;
+
+    /** True if this block was placed by the player (not world-generated). */
+    public boolean isPlayerPlaced = false;
+
     public Rectangle bounds;
 
     public Block() {
@@ -31,7 +35,14 @@ public class Block implements Poolable {
         this.type = type;
         this.active = true;
         this.isDestructible = (type != BlockType.BEDROCK);
+        this.isPlayerPlaced = false;
         this.bounds.set(x, y, width, height);
+    }
+
+    /** Overload for player-placed blocks. */
+    public void init(float x, float y, float width, float height, BlockType type, boolean playerPlaced) {
+        init(x, y, width, height, type);
+        this.isPlayerPlaced = playerPlaced;
     }
 
     @Override
@@ -43,6 +54,7 @@ public class Block implements Poolable {
         this.type = null;
         this.active = false;
         this.isDestructible = true;
+        this.isPlayerPlaced = false;
         this.bounds.set(0, 0, 0, 0);
     }
 }
