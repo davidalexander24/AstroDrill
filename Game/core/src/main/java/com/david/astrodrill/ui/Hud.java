@@ -12,6 +12,7 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
@@ -21,6 +22,7 @@ import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.david.astrodrill.GameManager;
 import com.david.astrodrill.crafting.MachineRecipe;
+import com.david.astrodrill.crafting.UpgradeDefinition;
 import com.david.astrodrill.entity.Block;
 import com.david.astrodrill.entity.LanderHub;
 import com.david.astrodrill.entity.Player;
@@ -52,8 +54,12 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         Block.BlockType.OBSIDIAN
     };
     private static final ItemType[] VAULT_ORDER = {
-        ItemType.RAW_IRON, ItemType.RAW_COPPER, ItemType.RAW_COAL, ItemType.DIRT, ItemType.STONE,
-        ItemType.IRON_INGOT, ItemType.COPPER_INGOT, ItemType.IRON_GEAR, ItemType.COPPER_WIRE
+        ItemType.RAW_IRON, ItemType.RAW_COPPER, ItemType.RAW_COAL,
+        ItemType.RAW_GOLD, ItemType.RAW_SILICON, ItemType.RAW_URANIUM, ItemType.RAW_OBSIDIAN,
+        ItemType.DIRT, ItemType.STONE,
+        ItemType.IRON_INGOT, ItemType.COPPER_INGOT, ItemType.GOLD_INGOT, ItemType.SILICON_WAFER,
+        ItemType.IRON_GEAR, ItemType.COPPER_WIRE, ItemType.CIRCUIT_BOARD,
+        ItemType.HULL_PLATING, ItemType.ROCKET_FUEL
     };
 
     // Hub Panel
@@ -204,9 +210,15 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         Label.LabelStyle sepStyle = new Label.LabelStyle(hubButtonFont, new Color(0.4f, 0.5f, 0.6f, 1f));
         outerPanel.add(new Label("━━━━━━━━━━━━━━━━━━━━", sepStyle)).colspan(2).center().padBottom(6).row();
 
-        // Dynamic content area
+        // Dynamic content area (scrollable so all recipes/upgrades stay reachable)
         hubContentArea = new Table();
-        outerPanel.add(hubContentArea).colspan(2).fillX().expandX().row();
+        hubContentArea.top();
+        ScrollPane.ScrollPaneStyle scrollStyle = new ScrollPane.ScrollPaneStyle();
+        ScrollPane scrollPane = new ScrollPane(hubContentArea, scrollStyle);
+        scrollPane.setFadeScrollBars(false);
+        scrollPane.setScrollingDisabled(true, false);
+        scrollPane.setForceScroll(false, true);
+        outerPanel.add(scrollPane).colspan(2).width(280).height(360).row();
 
         // Hint
         Label.LabelStyle hintStyle = new Label.LabelStyle(hubSmallFont, new Color(0.5f, 0.5f, 0.5f, 1f));
@@ -229,17 +241,101 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     }
 
     private void buildUpgradesContent() {
+        GameManager gm = GameManager.getInstance();
         TextButton.TextButtonStyle tbs = makeButtonStyle();
-        String[] labels = {"Upgrade Drill", "Upgrade Battery", "Upgrade Jetpack", "Sell Resources", "Repair Hull"};
-        for (String label : labels) {
-            TextButton btn = new TextButton(label, tbs);
-            btn.addListener(new ClickListener() {
-                @Override public void clicked(InputEvent e, float x, float y) {
-                    Gdx.app.log("HubTerminal", "[ACTION] " + label);
-                }
-            });
-            hubContentArea.add(btn).fillX().height(38).padBottom(4).row();
+        Label.LabelStyle nameStyle = new Label.LabelStyle(hubButtonFont, Color.WHITE);
+        Label.LabelStyle costOkStyle = new Label.LabelStyle(hubSmallFont, new Color(0.3f, 1f, 0.4f, 1f));
+        Label.LabelStyle costBadStyle = new Label.LabelStyle(hubSmallFont, new Color(1f, 0.3f, 0.3f, 1f));
+        Label.LabelStyle maxStyle = new Label.LabelStyle(hubSmallFont, new Color(0.6f, 0.85f, 1f, 1f));
+
+        for (UpgradeDefinition def : UpgradeDefinition.ALL) {
+            final UpgradeDefinition d = def;
+            int currentTier = getCurrentTier(def.key);
+            Map<ItemType, Integer> cost = def.costToNext(currentTier);
+            boolean atMax = (cost == null);
+
+            hubContentArea.add(new Label(def.displayName + "  Lv " + currentTier + "/" + def.maxTier, nameStyle))
+                .fillX().padTop(4).row();
+
+            if (atMax) {
+                hubContentArea.add(new Label("MAX", maxStyle)).fillX().padLeft(8).padBottom(6).row();
+                continue;
+            }
+
+            boolean canAfford = true;
+            StringBuilder costText = new StringBuilder();
+            for (Map.Entry<ItemType, Integer> entry : cost.entrySet()) {
+                int have = gm.getItemCount(entry.getKey());
+                int need = entry.getValue();
+                if (have < need) canAfford = false;
+                if (costText.length() > 0) costText.append("  ");
+                costText.append(formatItemName(entry.getKey())).append(": ").append(have).append("/").append(need);
+            }
+
+            Label costLabel = new Label(costText.toString(), canAfford ? costOkStyle : costBadStyle);
+            costLabel.setWrap(true);
+            hubContentArea.add(costLabel).fillX().width(260).padLeft(8).row();
+
+            if (canAfford) {
+                TextButton btn = new TextButton("Upgrade", tbs);
+                btn.addListener(new ClickListener() {
+                    @Override public void clicked(InputEvent e, float x, float y) {
+                        applyUpgrade(d);
+                    }
+                });
+                hubContentArea.add(btn).fillX().height(32).padBottom(6).row();
+            } else {
+                hubContentArea.add(new Label("Insufficient", new Label.LabelStyle(hubSmallFont, new Color(0.5f, 0.5f, 0.5f, 1f))))
+                    .padBottom(6).row();
+            }
         }
+    }
+
+    private int getCurrentTier(String key) {
+        if (player == null) return 1;
+        switch (key) {
+            case "DRILL":   return player.drillStrength;
+            case "BATTERY": return player.batteryTier;
+            case "JETPACK": return player.jetpackTier;
+            case "HUB":     return (landerHub != null) ? landerHub.tier : 1;
+            default:        return 1;
+        }
+    }
+
+    private void applyUpgrade(UpgradeDefinition def) {
+        int currentTier = getCurrentTier(def.key);
+        Map<ItemType, Integer> cost = def.costToNext(currentTier);
+        if (cost == null) return;
+
+        GameManager gm = GameManager.getInstance();
+        for (Map.Entry<ItemType, Integer> e : cost.entrySet()) {
+            if (!gm.hasItems(e.getKey(), e.getValue())) {
+                showBankingPopup("Not enough materials");
+                return;
+            }
+        }
+        for (Map.Entry<ItemType, Integer> e : cost.entrySet()) {
+            gm.consumeItems(e.getKey(), e.getValue());
+        }
+
+        switch (def.key) {
+            case "DRILL":
+                player.drillStrength++;
+                break;
+            case "BATTERY":
+                player.batteryTier++;
+                player.applyBatteryUpgrade();
+                break;
+            case "JETPACK":
+                player.jetpackTier++;
+                player.applyJetpackUpgrade();
+                break;
+            case "HUB":
+                if (landerHub != null) landerHub.upgradeTier();
+                break;
+        }
+        showBankingPopup(def.displayName + " upgraded");
+        rebuildHubContent();
     }
 
     private void buildManufacturingContent() {
@@ -464,8 +560,18 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             case COAL_GENERATOR:   return "CG";
             case IRON_SMELTER:     return "IS";
             case COPPER_SMELTER:   return "CS";
+            case GOLD_SMELTER:     return "GS";
             case GEAR_ASSEMBLER:   return "GA";
             case WIRE_ASSEMBLER:   return "WA";
+            case REFINERY:         return "RF";
+            case CIRCUIT_FAB:      return "CF";
+            case FUEL_MIXER:       return "FM";
+            case HULL_PRESS:       return "HP";
+            case GOLD_INGOT:       return "GI";
+            case SILICON_WAFER:    return "SW";
+            case CIRCUIT_BOARD:    return "CB";
+            case HULL_PLATING:     return "HL";
+            case ROCKET_FUEL:      return "FL";
             default:
                 String n = item.name();
                 return n.length() > 2 ? n.substring(0, 2) : n;

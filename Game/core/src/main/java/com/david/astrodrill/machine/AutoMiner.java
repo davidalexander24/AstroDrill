@@ -18,6 +18,7 @@ public class AutoMiner extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
+        if (userDisabled) { isPowered = false; return; }
         // AutoMiner requires adjacent power to operate
         isPowered = hasAdjacentPower(screen.getActiveMachines());
         if (!isPowered) return;

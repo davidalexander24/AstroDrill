@@ -48,6 +48,7 @@ public class PlayScreen implements Screen {
     private InputMultiplexer inputMultiplexer;
     private float clickCooldown = 0f;
     private Vector3 pendingClick = null;
+    private Vector3 pendingRightClick = null;
     private BitmapFont machineFont;
     private Rectangle placementCheck = new Rectangle();
 
@@ -101,11 +102,15 @@ public class PlayScreen implements Screen {
         inputMultiplexer.addProcessor(new InputAdapter() {
             @Override
             public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+                Vector3 world = camera.unproject(new Vector3(screenX, screenY, 0));
+                float gx = MathUtils.floor(world.x / BLOCK_SIZE) * BLOCK_SIZE;
+                float gy = MathUtils.floor(world.y / BLOCK_SIZE) * BLOCK_SIZE;
                 if (button == Input.Buttons.LEFT) {
-                    Vector3 world = camera.unproject(new Vector3(screenX, screenY, 0));
-                    float gx = MathUtils.floor(world.x / BLOCK_SIZE) * BLOCK_SIZE;
-                    float gy = MathUtils.floor(world.y / BLOCK_SIZE) * BLOCK_SIZE;
                     pendingClick = new Vector3(gx, gy, 0);
+                    return true;
+                }
+                if (button == Input.Buttons.RIGHT) {
+                    pendingRightClick = new Vector3(gx, gy, 0);
                     return true;
                 }
                 return false;
@@ -168,14 +173,16 @@ public class PlayScreen implements Screen {
     /**
      * Mines a block at (x,y). Used by player drill and AutoMiner.
      * NEVER breaks player-placed blocks or bedrock.
+     * Returns null (no break) if drillStrength is too low for the block's stratum.
      */
     public Block.BlockType mineBlockAt(float x, float y) {
         for (int i = 0; i < activeBlocks.size; i++) {
             Block block = activeBlocks.get(i);
             if (block.active && block.bounds.contains(x, y)) {
                 if (!block.isDestructible) return null;
-                if (block.isPlayerPlaced) return null;   // drill/autominer cannot break player-placed
+                if (block.isPlayerPlaced) return null;
                 if (isMachineSupportedBy(block)) return null;
+                if (player != null && !player.canMine(block.type)) return null;
 
                 Block.BlockType type = block.type;
                 activeBlocks.removeIndex(i);
@@ -185,6 +192,17 @@ public class PlayScreen implements Screen {
         }
         return null;
     }
+
+    /** Read-only block lookup at (x,y) — used to peek before showing "drill too weak" popup. */
+    private Block findBlockAt(float x, float y) {
+        for (int i = 0; i < activeBlocks.size; i++) {
+            Block block = activeBlocks.get(i);
+            if (block.active && block.bounds.contains(x, y)) return block;
+        }
+        return null;
+    }
+
+    private float drillTooWeakCooldown = 0f;
 
     @Override
     public void render(float delta) {
@@ -213,6 +231,23 @@ public class PlayScreen implements Screen {
             clickCooldown = 0.15f;
         } else {
             pendingClick = null;
+        }
+
+        // ── Right-Click: toggle machine on/off ─────────────────────────────
+        if (pendingRightClick != null) {
+            float dx = pendingRightClick.x + 0.5f - player.getCenterX();
+            float dy = pendingRightClick.y + 0.5f - player.getCenterY();
+            if (dx * dx + dy * dy <= Player.INTERACT_RADIUS * Player.INTERACT_RADIUS) {
+                for (Machine m : activeMachines) {
+                    if (Math.abs(m.x - pendingRightClick.x) < 0.01f
+                            && Math.abs(m.y - pendingRightClick.y) < 0.01f) {
+                        m.userDisabled = !m.userDisabled;
+                        hud.showBankingPopup(m.userDisabled ? "Machine OFF" : "Machine ON");
+                        break;
+                    }
+                }
+            }
+            pendingRightClick = null;
         }
 
         // ── Hub Proximity Detection & Recharge ───────────────────────────
@@ -273,27 +308,49 @@ public class PlayScreen implements Screen {
         }
 
         // Mining logic (drill never breaks player-placed blocks — enforced in mineBlockAt)
+        drillTooWeakCooldown -= delta;
         digTimer -= delta;
         if (digTimer <= 0) {
-            Block.BlockType mined = null;
+            float tx = -999f, ty = -999f;
 
             if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-                mined = mineBlockAt(player.x + player.width / 2, player.y - 0.1f);
+                tx = player.x + player.width / 2; ty = player.y - 0.1f;
             } else if ((Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) && blockedX) {
-                mined = mineBlockAt(player.x - 0.1f, player.y + player.height / 2);
+                tx = player.x - 0.1f; ty = player.y + player.height / 2;
             } else if ((Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) && blockedX) {
-                mined = mineBlockAt(player.x + player.width + 0.1f, player.y + player.height / 2);
+                tx = player.x + player.width + 0.1f; ty = player.y + player.height / 2;
             }
 
-            if (mined != null) {
-                player.addBlockToInventory(mined);
-                digTimer = 0.2f;
+            if (tx != -999f) {
+                // Peek the target block to give clear feedback when the drill is too weak
+                Block target = findBlockAt(tx, ty);
+                if (target != null && target.isDestructible && !target.isPlayerPlaced
+                        && !player.canMine(target.type) && drillTooWeakCooldown <= 0f) {
+                    hud.showBankingPopup("Drill too weak for this layer");
+                    drillTooWeakCooldown = 1.0f;
+                }
+
+                Block.BlockType mined = mineBlockAt(tx, ty);
+                if (mined != null) {
+                    player.addBlockToInventory(mined);
+                    digTimer = 0.20f;
+                }
             }
         }
 
-        // Flight Transition
+        // Flight Transition — must be at hub with required cargo
         if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
-            GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
+            GameManager gm = GameManager.getInstance();
+            int fuel = gm.getItemCount(ItemType.ROCKET_FUEL);
+            int plate = gm.getItemCount(ItemType.HULL_PLATING);
+            int chip = gm.getItemCount(ItemType.CIRCUIT_BOARD);
+            if (!player.isInHubZone) {
+                hud.showBankingPopup("Return to the hub to launch");
+            } else if (fuel < 20 || plate < 10 || chip < 5) {
+                hud.showBankingPopup("Launch needs: 20 Fuel ("+fuel+"), 10 Plating ("+plate+"), 5 Circuits ("+chip+")");
+            } else {
+                gm.changeScreen(GameManager.ScreenType.FLIGHT);
+            }
         }
 
         // Power Grid: CoalGenerators self-power; all other machines check adjacency in their own update()
@@ -306,7 +363,11 @@ public class PlayScreen implements Screen {
 
         // Machine Update (no gravity — machines are static grid objects)
         for (Machine machine : activeMachines) {
-            machine.update(delta, this);
+            try {
+                machine.update(delta, this);
+            } catch (Exception ex) {
+                Gdx.app.error("PlayScreen", "Machine update failed: " + machine.getMachineType(), ex);
+            }
         }
 
         // Camera
@@ -351,60 +412,11 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Render Machines — distinct colors per type
+        // Render machine FILLS (still inside the Filled pass)
         for (Machine machine : activeMachines) {
-            String type = machine.getMachineType();
-            Color machineColor;
-            switch (type) {
-                case "CoalGenerator":
-                    machineColor = machine.isPowered ? new Color(1f, 0.4f, 0.1f, 1f) : new Color(0.4f, 0.15f, 0.05f, 1f);
-                    break;
-                case "IronSmelter":
-                    machineColor = machine.isPowered ? new Color(1f, 0.65f, 0.2f, 1f) : new Color(0.45f, 0.28f, 0.1f, 1f);
-                    break;
-                case "CopperSmelter":
-                    machineColor = machine.isPowered ? new Color(0.95f, 0.55f, 0.25f, 1f) : new Color(0.42f, 0.24f, 0.12f, 1f);
-                    break;
-                case "GearAssembler":
-                    machineColor = machine.isPowered ? new Color(0.2f, 0.95f, 0.9f, 1f) : new Color(0.08f, 0.45f, 0.42f, 1f);
-                    break;
-                case "WireAssembler":
-                    machineColor = machine.isPowered ? new Color(0.8f, 0.4f, 1f, 1f) : new Color(0.35f, 0.15f, 0.5f, 1f);
-                    break;
-                case "AutoMiner":
-                    machineColor = machine.isPowered ? new Color(1f, 1f, 0.3f, 1f) : new Color(0.5f, 0.15f, 0.15f, 1f);
-                    break;
-                default:
-                    machineColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-                    break;
-            }
-            shapeRenderer.setColor(machineColor);
+            shapeRenderer.setColor(machineFillColor(machine));
             shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
-            
-            // Border
-            shapeRenderer.set(ShapeRenderer.ShapeType.Line);
-            if (machine.isPowered) shapeRenderer.setColor(Color.WHITE);
-            else shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f);
-            shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
-            shapeRenderer.set(ShapeRenderer.ShapeType.Filled);
         }
-
-        shapeRenderer.end();
-
-        // Render machine symbols using SpriteBatch
-        batch.setProjectionMatrix(camera.combined);
-        batch.begin();
-        for (Machine machine : activeMachines) {
-            String symbol = machine.getSymbol();
-            // Center the text roughly. Each character is roughly 0.2-0.3 units wide in this world scale.
-            // machineFont is generated with size 12, we need to scale it down to fit in 1x1 world units.
-            machineFont.getData().setScale(0.02f); 
-            machineFont.setColor(machine.isPowered ? Color.WHITE : Color.GRAY);
-            machineFont.draw(batch, symbol, machine.x + 0.5f - 0.15f, machine.y + 0.65f);
-        }
-        batch.end();
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         // Render LanderHub
         shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
@@ -415,6 +427,28 @@ public class PlayScreen implements Screen {
         shapeRenderer.rect(player.x, player.y, player.width, player.height);
 
         shapeRenderer.end();
+
+        // Separate pass for machine BORDERS
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        for (Machine machine : activeMachines) {
+            if (machine.userDisabled) shapeRenderer.setColor(1f, 0.2f, 0.2f, 1f);
+            else if (machine.isPowered) shapeRenderer.setColor(Color.WHITE);
+            else shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f);
+            shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
+        }
+        shapeRenderer.end();
+
+        // Render machine symbols using SpriteBatch
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        machineFont.getData().setScale(0.02f);
+        for (Machine machine : activeMachines) {
+            String symbol = machine.getSymbol();
+            if (symbol == null) symbol = "?";
+            machineFont.setColor(machine.isPowered ? Color.WHITE : Color.GRAY);
+            machineFont.draw(batch, symbol, machine.x + 0.5f - 0.15f, machine.y + 0.65f);
+        }
+        batch.end();
 
         // HUD
         hud.updateBattery();
@@ -510,10 +544,14 @@ public class PlayScreen implements Screen {
         // Must have the block in inventory
         if (!player.hasResources(type, 1)) return;
 
-        // Prevent placing on bedrock foundation
+        // Prevent placing on bedrock foundation (only the bedrock row, not the air above it)
         int col = Math.round(gx / BLOCK_SIZE);
         int row = Math.round(-gy / BLOCK_SIZE);
-        if (col >= HUB_COL_START && col <= HUB_COL_END && row <= HUB_FOUNDATION_DEPTH) return;
+        if (col >= HUB_COL_START && col <= HUB_COL_END && row == HUB_FOUNDATION_DEPTH) return;
+
+        // Prevent placement that would overlap the LanderHub entity AABB
+        Rectangle hubBounds = new Rectangle(landerHub.x, landerHub.y, landerHub.width, landerHub.height);
+        if (placementCheck.overlaps(hubBounds)) return;
 
         // Check cell not occupied by block
         for (Block b : activeBlocks) {
@@ -564,6 +602,27 @@ public class PlayScreen implements Screen {
         }
     }
 
+    /** Distinct color per machine type. Falls back to gray for unknown types. */
+    private Color machineFillColor(Machine machine) {
+        String type = machine.getMachineType();
+        boolean on = machine.isPowered && !machine.userDisabled;
+        if (type == null) return new Color(0.5f, 0.5f, 0.5f, 1f);
+        switch (type) {
+            case "CoalGenerator": return on ? new Color(1f, 0.4f, 0.1f, 1f)   : new Color(0.4f, 0.15f, 0.05f, 1f);
+            case "IronSmelter":   return on ? new Color(1f, 0.65f, 0.2f, 1f)  : new Color(0.45f, 0.28f, 0.1f, 1f);
+            case "CopperSmelter": return on ? new Color(0.95f, 0.55f, 0.25f, 1f) : new Color(0.42f, 0.24f, 0.12f, 1f);
+            case "GoldSmelter":   return on ? new Color(1f, 0.85f, 0.2f, 1f)  : new Color(0.5f, 0.42f, 0.1f, 1f);
+            case "GearAssembler": return on ? new Color(0.2f, 0.95f, 0.9f, 1f) : new Color(0.08f, 0.45f, 0.42f, 1f);
+            case "WireAssembler": return on ? new Color(0.8f, 0.4f, 1f, 1f)   : new Color(0.35f, 0.15f, 0.5f, 1f);
+            case "AutoMiner":     return on ? new Color(1f, 1f, 0.3f, 1f)     : new Color(0.5f, 0.15f, 0.15f, 1f);
+            case "Refinery":      return on ? new Color(0.6f, 0.8f, 0.95f, 1f) : new Color(0.25f, 0.35f, 0.45f, 1f);
+            case "CircuitFab":    return on ? new Color(0.3f, 0.95f, 0.5f, 1f) : new Color(0.12f, 0.45f, 0.22f, 1f);
+            case "FuelMixer":     return on ? new Color(0.5f, 1f, 0.3f, 1f)   : new Color(0.2f, 0.45f, 0.12f, 1f);
+            case "HullPress":     return on ? new Color(0.7f, 0.7f, 0.85f, 1f) : new Color(0.3f, 0.3f, 0.4f, 1f);
+            default:              return new Color(0.5f, 0.5f, 0.5f, 1f);
+        }
+    }
+
     /** Maps a Machine's type string back to an ItemType for inventory return. */
     private ItemType machineTypeToItemType(String type) {
         switch (type) {
@@ -571,8 +630,13 @@ public class PlayScreen implements Screen {
             case "CoalGenerator":  return ItemType.COAL_GENERATOR;
             case "IronSmelter":    return ItemType.IRON_SMELTER;
             case "CopperSmelter":  return ItemType.COPPER_SMELTER;
+            case "GoldSmelter":    return ItemType.GOLD_SMELTER;
             case "GearAssembler":  return ItemType.GEAR_ASSEMBLER;
             case "WireAssembler":  return ItemType.WIRE_ASSEMBLER;
+            case "Refinery":       return ItemType.REFINERY;
+            case "CircuitFab":     return ItemType.CIRCUIT_FAB;
+            case "FuelMixer":      return ItemType.FUEL_MIXER;
+            case "HullPress":      return ItemType.HULL_PRESS;
             default:               return null;
         }
     }

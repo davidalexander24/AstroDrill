@@ -46,8 +46,32 @@ public class Player {
     public static final float GRAVITY = -15f;
     public static final float MAX_FALL_SPEED = -10f;
     public static final float MAX_RISE_SPEED = 8f;
-    public static final float JETPACK_THRUST = 25f;
     public static final float JETPACK_BATTERY_DRAIN = 10f;
+
+    /** Per-instance jetpack thrust; scales with jetpackTier upgrades. */
+    public float jetpackThrust = 25f;
+
+    // ── Upgrade Tiers ────────────────────────────────────────────────────
+    /** Drill strength gates which strata can be mined: 1=Crust, 2=Mantle, 3=Core. */
+    public int drillStrength = 1;
+    public int batteryTier = 1;
+    public int jetpackTier = 1;
+
+    /** Whether the current drill can break the given block type. */
+    public boolean canMine(Block.BlockType t) {
+        return drillStrength >= Block.requiredStrength(t);
+    }
+
+    /** Recomputes maxBattery from batteryTier and refills to full. */
+    public void applyBatteryUpgrade() {
+        this.maxBattery = 100f * batteryTier;
+        this.currentBattery = this.maxBattery;
+    }
+
+    /** Recomputes jetpackThrust from jetpackTier. */
+    public void applyJetpackUpgrade() {
+        this.jetpackThrust = 25f + 10f * (jetpackTier - 1);
+    }
 
     // ── Interaction Radius ───────────────────────────────────────────────
     public static final float INTERACT_RADIUS = 6f;
@@ -106,9 +130,11 @@ public class Player {
 
         // 2) Machine items from machineInventory
         ItemType[] machineTypes = {
-            ItemType.IRON_SMELTER, ItemType.COPPER_SMELTER,
+            ItemType.IRON_SMELTER, ItemType.COPPER_SMELTER, ItemType.GOLD_SMELTER,
             ItemType.COAL_GENERATOR,
             ItemType.GEAR_ASSEMBLER, ItemType.WIRE_ASSEMBLER,
+            ItemType.REFINERY, ItemType.CIRCUIT_FAB,
+            ItemType.FUEL_MIXER, ItemType.HULL_PRESS,
             ItemType.AUTO_MINER
         };
         for (ItemType mt : machineTypes) {
@@ -163,7 +189,10 @@ public class Player {
     public static boolean isMachineItem(ItemType it) {
         return it == ItemType.AUTO_MINER || it == ItemType.COAL_GENERATOR
             || it == ItemType.IRON_SMELTER || it == ItemType.COPPER_SMELTER
-            || it == ItemType.GEAR_ASSEMBLER || it == ItemType.WIRE_ASSEMBLER;
+            || it == ItemType.GOLD_SMELTER
+            || it == ItemType.GEAR_ASSEMBLER || it == ItemType.WIRE_ASSEMBLER
+            || it == ItemType.REFINERY || it == ItemType.CIRCUIT_FAB
+            || it == ItemType.FUEL_MIXER || it == ItemType.HULL_PRESS;
     }
 
     /** Returns the MachineFactory key string for a machine ItemType. */
@@ -174,8 +203,13 @@ public class Player {
             case COAL_GENERATOR:   return "CoalGenerator";
             case IRON_SMELTER:     return "IronSmelter";
             case COPPER_SMELTER:   return "CopperSmelter";
+            case GOLD_SMELTER:     return "GoldSmelter";
             case GEAR_ASSEMBLER:   return "GearAssembler";
             case WIRE_ASSEMBLER:   return "WireAssembler";
+            case REFINERY:         return "Refinery";
+            case CIRCUIT_FAB:      return "CircuitFab";
+            case FUEL_MIXER:       return "FuelMixer";
+            case HULL_PRESS:       return "HullPress";
             default:               return null;
         }
     }
@@ -255,6 +289,11 @@ public class Player {
             case IRON_ORE:    return ItemType.RAW_IRON;
             case COPPER_ORE:  return ItemType.RAW_COPPER;
             case COAL_ORE:    return ItemType.RAW_COAL;
+            case GOLD_ORE:    return ItemType.RAW_GOLD;
+            case SILICON_ORE: return ItemType.RAW_SILICON;
+            case URANIUM_ORE: return ItemType.RAW_URANIUM;
+            case OBSIDIAN:    return ItemType.RAW_OBSIDIAN;
+            case BASALT:      return ItemType.STONE;
             case DIRT:        return ItemType.DIRT;
             case STONE:       return ItemType.STONE;
             default:          return null;
@@ -331,7 +370,7 @@ public class Player {
         boolean jetting = false;
         if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
             if (currentBattery > 0) {
-                velocityY += JETPACK_THRUST * delta;
+                velocityY += jetpackThrust * delta;
                 jetting = true;
             }
         }

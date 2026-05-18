@@ -21,6 +21,10 @@ public class CoalGenerator extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
+        if (userDisabled) {
+            burnTimer = 0f;  // force inactive — neighbors lose power next frame
+            return;
+        }
         if (burnTimer > 0) {
             burnTimer -= delta;
         } else {

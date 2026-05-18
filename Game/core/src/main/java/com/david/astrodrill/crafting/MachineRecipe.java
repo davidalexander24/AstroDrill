@@ -49,6 +49,22 @@ public class MachineRecipe {
             // ── Stage 4: Automation Reward ─────────────────────────────
             new MachineRecipe("Auto Miner", "AutoMiner", ItemType.AUTO_MINER,
                 mapOf(ItemType.IRON_GEAR, 10, ItemType.COPPER_WIRE, 10, ItemType.IRON_INGOT, 5), 1),
+
+            // ── Stage 5: Mid-game refining (Hub Tier 1+) ───────────────
+            new MachineRecipe("Gold Smelter", "GoldSmelter", ItemType.GOLD_SMELTER,
+                mapOf(ItemType.STONE, 30, ItemType.IRON_INGOT, 10), 1),
+
+            // ── Stage 6: Electronics (Hub Tier 2) ──────────────────────
+            new MachineRecipe("Refinery", "Refinery", ItemType.REFINERY,
+                mapOf(ItemType.IRON_INGOT, 20, ItemType.COPPER_INGOT, 10), 2),
+            new MachineRecipe("Circuit Fab", "CircuitFab", ItemType.CIRCUIT_FAB,
+                mapOf(ItemType.IRON_GEAR, 10, ItemType.COPPER_WIRE, 15), 2),
+
+            // ── Stage 7: Rocket components (Hub Tier 3) ────────────────
+            new MachineRecipe("Fuel Mixer", "FuelMixer", ItemType.FUEL_MIXER,
+                mapOf(ItemType.IRON_INGOT, 30, ItemType.COPPER_WIRE, 20), 3),
+            new MachineRecipe("Hull Press", "HullPress", ItemType.HULL_PRESS,
+                mapOf(ItemType.IRON_INGOT, 40, ItemType.IRON_GEAR, 15), 3),
         };
     }
 

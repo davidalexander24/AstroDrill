@@ -3,46 +3,80 @@ package com.david.astrodrill.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.physics.box2d.Body;
+import com.badlogic.gdx.physics.box2d.BodyDef;
+import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
+import com.badlogic.gdx.physics.box2d.FixtureDef;
+import com.badlogic.gdx.physics.box2d.PolygonShape;
+import com.badlogic.gdx.physics.box2d.World;
+import com.david.astrodrill.GameManager;
 import com.david.astrodrill.entity.Rocket;
+import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.strategy.ChemicalEngine;
 import com.david.astrodrill.strategy.IonEngine;
 
 public class FlightScreen implements Screen {
 
-    private OrthographicCamera camera;
+    private static final int REQUIRED_FUEL = 20;
+    private static final int REQUIRED_PLATING = 10;
+    private static final int REQUIRED_CIRCUITS = 5;
+    private static final float ESCAPE_ALTITUDE = 500f;
+
+    private enum FlightState { ACTIVE, WIN, CRASH }
+    private FlightState state = FlightState.ACTIVE;
+
+    private OrthographicCamera worldCamera;
+    private OrthographicCamera hudCamera;
     private World world;
     private Box2DDebugRenderer debugRenderer;
     private Rocket rocket;
     private Body launchpad;
     private boolean isChemicalEngine = true;
 
+    private SpriteBatch batch;
+    private BitmapFont hudFont;
+    private BitmapFont bigFont;
+    private FreeTypeFontGenerator generator;
+
     @Override
     public void show() {
-        camera = new OrthographicCamera();
+        worldCamera = new OrthographicCamera();
+        hudCamera = new OrthographicCamera();
         world = new World(new Vector2(0, -9.8f), true);
         debugRenderer = new Box2DDebugRenderer();
+        batch = new SpriteBatch();
 
-        // Create Launchpad
+        generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter hp = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        hp.size = 22; hp.color = Color.WHITE; hp.borderWidth = 1.5f; hp.borderColor = Color.BLACK;
+        hudFont = generator.generateFont(hp);
+
+        FreeTypeFontGenerator.FreeTypeFontParameter bp = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        bp.size = 48; bp.color = Color.WHITE; bp.borderWidth = 2.5f; bp.borderColor = Color.BLACK;
+        bigFont = generator.generateFont(bp);
+
+        // Launchpad
         BodyDef padDef = new BodyDef();
         padDef.type = BodyDef.BodyType.StaticBody;
         padDef.position.set(0, -2);
         launchpad = world.createBody(padDef);
-        
         PolygonShape padShape = new PolygonShape();
         padShape.setAsBox(10f, 1f);
         launchpad.createFixture(padShape, 0.0f);
         padShape.dispose();
 
-        // Create Rocket
+        // Rocket
         BodyDef rocketDef = new BodyDef();
         rocketDef.type = BodyDef.BodyType.DynamicBody;
         rocketDef.position.set(0, 2);
         Body rocketBody = world.createBody(rocketDef);
-
         PolygonShape rocketShape = new PolygonShape();
         rocketShape.setAsBox(0.5f, 2f);
         FixtureDef fixDef = new FixtureDef();
@@ -53,63 +87,122 @@ public class FlightScreen implements Screen {
         rocketShape.dispose();
 
         rocket = new Rocket(rocketBody, new ChemicalEngine());
+
+        // Consume launch cargo from vault and fuel the rocket
+        GameManager gm = GameManager.getInstance();
+        gm.consumeItems(ItemType.ROCKET_FUEL, REQUIRED_FUEL);
+        gm.consumeItems(ItemType.HULL_PLATING, REQUIRED_PLATING);
+        gm.consumeItems(ItemType.CIRCUIT_BOARD, REQUIRED_CIRCUITS);
+        rocket.fuel = rocket.maxFuel;
     }
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClearColor(0.02f, 0.02f, 0.08f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
-            rocket.applyThrust();
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-            rocket.body.applyTorque(15f, true); // Rotate left
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-            rocket.body.applyTorque(-15f, true); // Rotate right
-        }
-        
-        if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
-            isChemicalEngine = !isChemicalEngine;
-            if (isChemicalEngine) {
-                rocket.setEngine(new ChemicalEngine());
-                System.out.println("Engine swapped: Chemical Engine (High Thrust)");
-            } else {
-                rocket.setEngine(new IonEngine());
-                System.out.println("Engine swapped: Ion Engine (Low Thrust)");
+        // ── Input + Physics (only when active) ───────────────────────────
+        if (state == FlightState.ACTIVE) {
+            if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
+                rocket.applyThrust(delta);
+            }
+            if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+                rocket.body.applyTorque(15f, true);
+            }
+            if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+                rocket.body.applyTorque(-15f, true);
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+                isChemicalEngine = !isChemicalEngine;
+                rocket.setEngine(isChemicalEngine ? new ChemicalEngine() : new IonEngine());
+            }
+
+            world.step(delta, 6, 2);
+
+            // Track max altitude
+            float y = rocket.body.getPosition().y;
+            if (y > rocket.maxAltitude) rocket.maxAltitude = y;
+
+            // Win
+            if (rocket.maxAltitude >= ESCAPE_ALTITUDE) {
+                state = FlightState.WIN;
+            }
+            // Lose: out of fuel and falling
+            else if (rocket.fuel <= 0f && rocket.body.getLinearVelocity().y <= 0f
+                    && rocket.maxAltitude < ESCAPE_ALTITUDE) {
+                state = FlightState.CRASH;
             }
         }
 
-        world.step(delta, 6, 2);
+        // Always allow R to return to mining phase
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            GameManager.getInstance().changeScreen(GameManager.ScreenType.PLAY);
+            return;
+        }
+        // After winning, Enter returns to main menu
+        if (state == FlightState.WIN && Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+            GameManager.getInstance().changeScreen(GameManager.ScreenType.MAIN_MENU);
+            return;
+        }
 
-        camera.position.set(rocket.body.getPosition().x, rocket.body.getPosition().y, 0);
-        camera.update();
+        // ── Render world ─────────────────────────────────────────────────
+        worldCamera.position.set(rocket.body.getPosition().x, rocket.body.getPosition().y, 0);
+        worldCamera.update();
+        debugRenderer.render(world, worldCamera.combined);
 
-        debugRenderer.render(world, camera.combined);
+        // ── Render HUD ───────────────────────────────────────────────────
+        batch.setProjectionMatrix(hudCamera.combined);
+        batch.begin();
+        float w = hudCamera.viewportWidth;
+        float h = hudCamera.viewportHeight;
+
+        hudFont.setColor(Color.WHITE);
+        hudFont.draw(batch, String.format("Altitude: %.0f m  /  %.0f", rocket.maxAltitude, ESCAPE_ALTITUDE), 20, h - 20);
+        float fuelPct = (rocket.fuel / rocket.maxFuel) * 100f;
+        hudFont.setColor(fuelPct < 25f ? Color.RED : (fuelPct < 50f ? Color.YELLOW : Color.WHITE));
+        hudFont.draw(batch, String.format("Fuel: %.0f%%", fuelPct), 20, h - 48);
+        hudFont.setColor(new Color(0.6f, 0.85f, 1f, 1f));
+        hudFont.draw(batch, "Engine: " + rocket.getEngine().getName() + "  (E to swap)", 20, h - 76);
+
+        if (state == FlightState.ACTIVE) {
+            hudFont.setColor(new Color(0.7f, 0.7f, 0.7f, 1f));
+            hudFont.draw(batch, "W/Up: thrust   A/D: rotate   R: abort to mining", 20, 24);
+        } else if (state == FlightState.WIN) {
+            bigFont.setColor(new Color(0.4f, 1f, 0.5f, 1f));
+            bigFont.draw(batch, "ESCAPE SUCCESSFUL", w / 2f - 280, h / 2f + 20);
+            hudFont.setColor(Color.WHITE);
+            hudFont.draw(batch, "Press ENTER to return to main menu", w / 2f - 200, h / 2f - 30);
+        } else if (state == FlightState.CRASH) {
+            bigFont.setColor(new Color(1f, 0.4f, 0.3f, 1f));
+            bigFont.draw(batch, "CRASH - OUT OF FUEL", w / 2f - 280, h / 2f + 20);
+            hudFont.setColor(Color.WHITE);
+            hudFont.draw(batch, "Press R to retry from the surface", w / 2f - 200, h / 2f - 30);
+        }
+        batch.end();
     }
 
     @Override
     public void resize(int width, int height) {
         float viewportWidth = 30f;
         float viewportHeight = viewportWidth * ((float) height / width);
-        camera.setToOrtho(false, viewportWidth, viewportHeight);
-        camera.position.set(0, 0, 0);
-        camera.update();
+        worldCamera.setToOrtho(false, viewportWidth, viewportHeight);
+        worldCamera.position.set(0, 0, 0);
+        worldCamera.update();
+        hudCamera.setToOrtho(false, width, height);
+        hudCamera.update();
     }
 
-    @Override
-    public void pause() {}
-
-    @Override
-    public void resume() {}
-
-    @Override
-    public void hide() {}
+    @Override public void pause() {}
+    @Override public void resume() {}
+    @Override public void hide() {}
 
     @Override
     public void dispose() {
         world.dispose();
         debugRenderer.dispose();
+        if (batch != null) batch.dispose();
+        if (hudFont != null) hudFont.dispose();
+        if (bigFont != null) bigFont.dispose();
+        if (generator != null) generator.dispose();
     }
 }

@@ -9,6 +9,22 @@ public class Block implements Poolable {
         DIRT, STONE, COAL_ORE, COPPER_ORE, IRON_ORE, BASALT, GOLD_ORE, SILICON_ORE, OBSIDIAN, URANIUM_ORE, BEDROCK
     }
 
+    /** Minimum drill strength required to mine a given block type. BEDROCK is unreachable. */
+    public static int requiredStrength(BlockType t) {
+        if (t == null) return 1;
+        switch (t) {
+            case DIRT: case STONE: case COAL_ORE: case COPPER_ORE: case IRON_ORE:
+                return 1;
+            case BASALT: case GOLD_ORE: case SILICON_ORE:
+                return 2;
+            case OBSIDIAN: case URANIUM_ORE:
+                return 3;
+            case BEDROCK:
+            default:
+                return 99;
+        }
+    }
+
     public BlockType type;
     public float x;
     public float y;

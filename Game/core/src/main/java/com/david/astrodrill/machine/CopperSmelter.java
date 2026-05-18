@@ -18,6 +18,7 @@ public class CopperSmelter extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
+        if (userDisabled) { isPowered = false; return; }
         isPowered = hasAdjacentPower(screen.getActiveMachines());
         if (!isPowered) return;
 

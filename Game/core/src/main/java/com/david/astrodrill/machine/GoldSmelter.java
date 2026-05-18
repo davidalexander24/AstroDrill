@@ -5,16 +5,16 @@ import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.screen.PlayScreen;
 
 /**
- * Dedicated assembler: 2 IRON_INGOT → 1 IRON_GEAR (requires adjacent CoalGenerator).
+ * 1 RAW_GOLD → 1 GOLD_INGOT (requires adjacent CoalGenerator).
  */
-public class GearAssembler extends Machine {
-    public GearAssembler(float x, float y, float w, float h) {
+public class GoldSmelter extends Machine {
+    public GoldSmelter(float x, float y, float w, float h) {
         this.x = x; this.y = y; this.width = w; this.height = h;
-        this.processDuration = 4f;
+        this.processDuration = 5f;
     }
 
-    @Override public String getMachineType() { return "GearAssembler"; }
-    @Override public String getSymbol() { return "GA"; }
+    @Override public String getMachineType() { return "GoldSmelter"; }
+    @Override public String getSymbol() { return "GS"; }
 
     @Override
     public void update(float delta, PlayScreen screen) {
@@ -24,8 +24,8 @@ public class GearAssembler extends Machine {
 
         if (processTimer <= 0) {
             GameManager gm = GameManager.getInstance();
-            if (gm.hasItems(ItemType.IRON_INGOT, 2)) {
-                gm.consumeItems(ItemType.IRON_INGOT, 2);
+            if (gm.hasItems(ItemType.RAW_GOLD, 1)) {
+                gm.consumeItems(ItemType.RAW_GOLD, 1);
                 processTimer = processDuration;
             }
         }
@@ -37,6 +37,6 @@ public class GearAssembler extends Machine {
 
     @Override
     public void process() {
-        GameManager.getInstance().addItems(ItemType.IRON_GEAR, 1);
+        GameManager.getInstance().addItems(ItemType.GOLD_INGOT, 1);
     }
 }

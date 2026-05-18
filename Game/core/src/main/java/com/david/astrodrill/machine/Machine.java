@@ -13,6 +13,9 @@ public abstract class Machine {
     public float processTimer = 0f;
     public float processDuration = 2f;
 
+    /** Manually toggled off by right-clicking the machine. Disabled machines skip update(). */
+    public boolean userDisabled = false;
+
     /**
      * Returns a unique type string for this machine, used for rendering dispatch.
      */
