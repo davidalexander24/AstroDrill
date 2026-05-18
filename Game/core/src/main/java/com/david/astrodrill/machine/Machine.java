@@ -16,6 +16,10 @@ public abstract class Machine {
     /** Manually toggled off by right-clicking the machine. Disabled machines skip update(). */
     public boolean userDisabled = false;
 
+    /** Set true each frame when this machine has work it could perform (input available or mid-process).
+     *  CoalGenerator polls neighbors for this flag — coal only burns when there is real demand. */
+    public boolean wantsPower = false;
+
     /**
      * Returns a unique type string for this machine, used for rendering dispatch.
      */

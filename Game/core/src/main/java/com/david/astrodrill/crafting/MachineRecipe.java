@@ -42,29 +42,29 @@ public class MachineRecipe {
 
             // ── Stage 3: Assemblers (sustained smelting) ───────────────
             new MachineRecipe("Gear Assembler", "GearAssembler", ItemType.GEAR_ASSEMBLER,
-                mapOf(ItemType.IRON_INGOT, 20, ItemType.COPPER_INGOT, 10), 1),
+                mapOf(ItemType.IRON_INGOT, 15, ItemType.COPPER_INGOT, 6), 1),
             new MachineRecipe("Wire Assembler", "WireAssembler", ItemType.WIRE_ASSEMBLER,
-                mapOf(ItemType.IRON_INGOT, 15, ItemType.COPPER_INGOT, 15), 1),
+                mapOf(ItemType.IRON_INGOT, 12, ItemType.COPPER_INGOT, 10), 1),
 
             // ── Stage 4: Automation Reward ─────────────────────────────
             new MachineRecipe("Auto Miner", "AutoMiner", ItemType.AUTO_MINER,
-                mapOf(ItemType.IRON_GEAR, 10, ItemType.COPPER_WIRE, 10, ItemType.IRON_INGOT, 5), 1),
+                mapOf(ItemType.IRON_GEAR, 6, ItemType.COPPER_WIRE, 6, ItemType.IRON_INGOT, 4), 1),
 
             // ── Stage 5: Mid-game refining (Hub Tier 1+) ───────────────
             new MachineRecipe("Gold Smelter", "GoldSmelter", ItemType.GOLD_SMELTER,
-                mapOf(ItemType.STONE, 30, ItemType.IRON_INGOT, 10), 1),
+                mapOf(ItemType.STONE, 30, ItemType.IRON_INGOT, 8), 1),
 
             // ── Stage 6: Electronics (Hub Tier 2) ──────────────────────
             new MachineRecipe("Refinery", "Refinery", ItemType.REFINERY,
-                mapOf(ItemType.IRON_INGOT, 20, ItemType.COPPER_INGOT, 10), 2),
+                mapOf(ItemType.IRON_INGOT, 15, ItemType.COPPER_INGOT, 6), 2),
             new MachineRecipe("Circuit Fab", "CircuitFab", ItemType.CIRCUIT_FAB,
-                mapOf(ItemType.IRON_GEAR, 10, ItemType.COPPER_WIRE, 15), 2),
+                mapOf(ItemType.IRON_GEAR, 6, ItemType.COPPER_WIRE, 10), 2),
 
             // ── Stage 7: Rocket components (Hub Tier 3) ────────────────
             new MachineRecipe("Fuel Mixer", "FuelMixer", ItemType.FUEL_MIXER,
-                mapOf(ItemType.IRON_INGOT, 30, ItemType.COPPER_WIRE, 20), 3),
+                mapOf(ItemType.IRON_INGOT, 25, ItemType.COPPER_WIRE, 12), 3),
             new MachineRecipe("Hull Press", "HullPress", ItemType.HULL_PRESS,
-                mapOf(ItemType.IRON_INGOT, 40, ItemType.IRON_GEAR, 15), 3),
+                mapOf(ItemType.IRON_INGOT, 30, ItemType.IRON_GEAR, 10), 3),
         };
     }
 

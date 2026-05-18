@@ -27,8 +27,10 @@ public class Player {
     private float spawnX;
     private float spawnY;
     
-    public float maxBattery = 100f;
-    public float currentBattery = 100f;
+    public float maxBattery = 120f;
+    public float currentBattery = 120f;
+
+    public static final float BASE_SPEED = 6.5f;
 
     /** Set by PlayScreen each frame — true when inside the LanderHub safe zone. */
     public boolean isInHubZone = false;
@@ -49,13 +51,14 @@ public class Player {
     public static final float JETPACK_BATTERY_DRAIN = 10f;
 
     /** Per-instance jetpack thrust; scales with jetpackTier upgrades. */
-    public float jetpackThrust = 25f;
+    public float jetpackThrust = 30f;
 
     // ── Upgrade Tiers ────────────────────────────────────────────────────
     /** Drill strength gates which strata can be mined: 1=Crust, 2=Mantle, 3=Core. */
     public int drillStrength = 1;
     public int batteryTier = 1;
     public int jetpackTier = 1;
+    public int wheelTier = 1;
 
     /** Whether the current drill can break the given block type. */
     public boolean canMine(Block.BlockType t) {
@@ -64,13 +67,18 @@ public class Player {
 
     /** Recomputes maxBattery from batteryTier and refills to full. */
     public void applyBatteryUpgrade() {
-        this.maxBattery = 100f * batteryTier;
+        this.maxBattery = 120f * batteryTier;
         this.currentBattery = this.maxBattery;
     }
 
     /** Recomputes jetpackThrust from jetpackTier. */
     public void applyJetpackUpgrade() {
-        this.jetpackThrust = 25f + 10f * (jetpackTier - 1);
+        this.jetpackThrust = 30f + 15f * (jetpackTier - 1);
+    }
+
+    /** Recomputes horizontal speed from wheelTier. */
+    public void applyWheelUpgrade() {
+        this.speed = BASE_SPEED + 1.5f * (wheelTier - 1);
     }
 
     // ── Interaction Radius ───────────────────────────────────────────────
@@ -83,7 +91,7 @@ public class Player {
         this.height = height;
         this.velocityX = 0;
         this.velocityY = 0;
-        this.speed = 5f;
+        this.speed = BASE_SPEED;
         this.bounds = new Rectangle(x, y, width, height);
         this.spawnX = x;
         this.spawnY = y;
@@ -284,7 +292,7 @@ public class Player {
     }
 
     /** Maps a mined BlockType to the corresponding raw vault ItemType. */
-    private ItemType blockTypeToRawItemType(Block.BlockType bt) {
+    public static ItemType blockTypeToRawItemType(Block.BlockType bt) {
         switch (bt) {
             case IRON_ORE:    return ItemType.RAW_IRON;
             case COPPER_ORE:  return ItemType.RAW_COPPER;

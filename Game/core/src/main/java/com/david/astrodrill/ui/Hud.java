@@ -88,6 +88,9 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private float bankingPopupTimer = 0f;
     private BitmapFont bankingFont;
 
+    // Dev toggle button
+    private TextButton devToggleButton;
+
     public Hud(SpriteBatch batch) {
         stage = new Stage(new ScreenViewport(), batch);
         table = new Table();
@@ -110,6 +113,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         buildHubPanel();
         buildHotbarUI();
         buildBankingPopup();
+        buildDevToggle();
     }
 
     private void rebuildTable() {
@@ -297,6 +301,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             case "DRILL":   return player.drillStrength;
             case "BATTERY": return player.batteryTier;
             case "JETPACK": return player.jetpackTier;
+            case "WHEEL":   return player.wheelTier;
             case "HUB":     return (landerHub != null) ? landerHub.tier : 1;
             default:        return 1;
         }
@@ -329,6 +334,10 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             case "JETPACK":
                 player.jetpackTier++;
                 player.applyJetpackUpgrade();
+                break;
+            case "WHEEL":
+                player.wheelTier++;
+                player.applyWheelUpgrade();
                 break;
             case "HUB":
                 if (landerHub != null) landerHub.upgradeTier();
@@ -519,6 +528,46 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         bankingPopupTimer = 2.5f;
     }
 
+    // ── Dev Toggle Button ────────────────────────────────────────────────
+
+    private void buildDevToggle() {
+        Table wrapper = new Table();
+        wrapper.setFillParent(true);
+        wrapper.top().right();
+        wrapper.setTouchable(Touchable.childrenOnly);
+
+        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
+        s.font = hubButtonFont; s.fontColor = Color.WHITE;
+        s.overFontColor = new Color(0.6f, 0.85f, 1f, 1f);
+        s.up = new TextureRegionDrawable(new TextureRegion(buttonUpTexture));
+        s.over = new TextureRegionDrawable(new TextureRegion(buttonOverTexture));
+        s.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
+
+        devToggleButton = new TextButton(devLabel(), s);
+        devToggleButton.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager gm = GameManager.getInstance();
+                boolean newState = !gm.isDevUnlimited();
+                gm.setDevUnlimited(newState);
+                if (!newState && player != null) {
+                    // Spec: turning dev OFF wipes any items the player was holding
+                    player.inventory.clear();
+                    player.machineInventory.clear();
+                    player.notifyObservers();
+                }
+                devToggleButton.setText(devLabel());
+                showBankingPopup(newState ? "DEV resources ON" : "DEV resources OFF — inventory cleared");
+            }
+        });
+
+        wrapper.add(devToggleButton).width(140).height(32).padTop(8).padRight(8);
+        stage.addActor(wrapper);
+    }
+
+    private String devLabel() {
+        return "DEV: " + (GameManager.getInstance().isDevUnlimited() ? "ON" : "OFF");
+    }
+
     public void updateHotbar(float delta) {
         if (player == null) return;
 
@@ -612,6 +661,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     }
 
     private String formatItemName(ItemType type) {
+        if (type == ItemType.RAW_COAL) return "Coal";
         return formatNameString(type.name());
     }
 

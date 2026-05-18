@@ -15,8 +15,10 @@ import java.util.Map;
 public class GameManager {
     private static final GameManager instance = new GameManager();
 
-    // Dev toggle: set true to seed the vault for testing the launch path quickly.
-    private static final boolean DEV_UNLIMITED_RESOURCES = false;
+    // Dev toggle: runtime-mutable so the HUD button can flip it.
+    // When enabled, getItemCount/hasItems short-circuit to DEV_RESOURCE_COUNT and
+    // consumeItems is a no-op.
+    private boolean devUnlimited = false;
     private static final int DEV_RESOURCE_COUNT = 99999;
 
     private Game game;
@@ -27,11 +29,7 @@ public class GameManager {
         LOADING, MAIN_MENU, PLAY, FLIGHT
     }
 
-    private GameManager() {
-        if (DEV_UNLIMITED_RESOURCES) {
-            seedDevResources();
-        }
-    }
+    private GameManager() { }
 
     public static GameManager getInstance() {
         return instance;
@@ -74,7 +72,7 @@ public class GameManager {
     }
 
     public void addItems(ItemType type, int amount) {
-        if (DEV_UNLIMITED_RESOURCES) {
+        if (devUnlimited) {
             globalVault.put(type, DEV_RESOURCE_COUNT);
             notifyObservers();
             return;
@@ -84,12 +82,12 @@ public class GameManager {
     }
 
     public boolean hasItems(ItemType type, int amount) {
-        if (DEV_UNLIMITED_RESOURCES) return true;
+        if (devUnlimited) return true;
         return globalVault.getOrDefault(type, 0) >= amount;
     }
 
     public void consumeItems(ItemType type, int amount) {
-        if (DEV_UNLIMITED_RESOURCES) return;
+        if (devUnlimited) return;
         if (hasItems(type, amount)) {
             globalVault.put(type, globalVault.get(type) - amount);
             notifyObservers();
@@ -97,8 +95,25 @@ public class GameManager {
     }
 
     public int getItemCount(ItemType type) {
-        if (DEV_UNLIMITED_RESOURCES) return DEV_RESOURCE_COUNT;
+        if (devUnlimited) return DEV_RESOURCE_COUNT;
         return globalVault.getOrDefault(type, 0);
+    }
+
+    public boolean isDevUnlimited() { return devUnlimited; }
+
+    /**
+     * Toggles unlimited-resource dev mode. Turning it ON seeds the vault with a large
+     * count of every item. Turning it OFF clears the vault so the previous dev seed
+     * doesn't carry into real play.
+     */
+    public void setDevUnlimited(boolean enabled) {
+        this.devUnlimited = enabled;
+        if (enabled) {
+            seedDevResources();
+        } else {
+            globalVault.clear();
+        }
+        notifyObservers();
     }
 
     private void seedDevResources() {

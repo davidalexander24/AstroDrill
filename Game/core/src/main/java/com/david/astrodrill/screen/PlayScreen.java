@@ -202,6 +202,32 @@ public class PlayScreen implements Screen {
         return null;
     }
 
+    /**
+     * AutoMiner-specific mining path. Skips the isMachineSupportedBy guard
+     * (the AutoMiner *is* the supporting machine) and the player drillStrength check.
+     * Still refuses bedrock and player-placed blocks.
+     */
+    public Block.BlockType mineBlockForMachine(float x, float y) {
+        for (int i = 0; i < activeBlocks.size; i++) {
+            Block block = activeBlocks.get(i);
+            if (block.active && block.bounds.contains(x, y)) {
+                if (!block.isDestructible) return null;
+                if (block.isPlayerPlaced) return null;
+                Block.BlockType type = block.type;
+                activeBlocks.removeIndex(i);
+                blockPool.free(block);
+                return type;
+            }
+        }
+        return null;
+    }
+
+    /** True if there is a destructible, non-player-placed block directly under the machine. */
+    public boolean canMineBelowMachine(Machine m) {
+        Block target = findBlockAt(m.x + m.width / 2f, m.y - 0.1f);
+        return target != null && target.isDestructible && !target.isPlayerPlaced;
+    }
+
     private float drillTooWeakCooldown = 0f;
 
     @Override
@@ -242,7 +268,8 @@ public class PlayScreen implements Screen {
                     if (Math.abs(m.x - pendingRightClick.x) < 0.01f
                             && Math.abs(m.y - pendingRightClick.y) < 0.01f) {
                         m.userDisabled = !m.userDisabled;
-                        hud.showBankingPopup(m.userDisabled ? "Machine OFF" : "Machine ON");
+                        String name = formatMachineName(m.getMachineType());
+                        hud.showBankingPopup(name + (m.userDisabled ? " OFF" : " ON"));
                         break;
                     }
                 }
@@ -353,20 +380,23 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Power Grid: CoalGenerators self-power; all other machines check adjacency in their own update()
-        for (Machine m : activeMachines) {
-            if (m instanceof CoalGenerator) {
-                m.isPowered = ((CoalGenerator) m).isActive();
-            }
-            // Non-generator machines set their own isPowered in update() via hasAdjacentPower()
-        }
-
-        // Machine Update (no gravity — machines are static grid objects)
+        // Machine Update — two phases so CoalGenerator can read this frame's wantsPower from neighbors.
+        // Phase 1: consumers. They set wantsPower based on their inputs, then process if powered.
         for (Machine machine : activeMachines) {
+            if (machine instanceof CoalGenerator) continue;
             try {
                 machine.update(delta, this);
             } catch (Exception ex) {
                 Gdx.app.error("PlayScreen", "Machine update failed: " + machine.getMachineType(), ex);
+            }
+        }
+        // Phase 2: generators. Burn coal proportional to adjacent demand set in Phase 1.
+        for (Machine machine : activeMachines) {
+            if (!(machine instanceof CoalGenerator)) continue;
+            try {
+                machine.update(delta, this);
+            } catch (Exception ex) {
+                Gdx.app.error("PlayScreen", "CoalGenerator update failed", ex);
             }
         }
 
@@ -620,6 +650,25 @@ public class PlayScreen implements Screen {
             case "FuelMixer":     return on ? new Color(0.5f, 1f, 0.3f, 1f)   : new Color(0.2f, 0.45f, 0.12f, 1f);
             case "HullPress":     return on ? new Color(0.7f, 0.7f, 0.85f, 1f) : new Color(0.3f, 0.3f, 0.4f, 1f);
             default:              return new Color(0.5f, 0.5f, 0.5f, 1f);
+        }
+    }
+
+    /** Pretty name for popups: "IronSmelter" → "Iron Smelter". */
+    private static String formatMachineName(String type) {
+        if (type == null) return "Machine";
+        switch (type) {
+            case "IronSmelter":   return "Iron Smelter";
+            case "CopperSmelter": return "Copper Smelter";
+            case "GoldSmelter":   return "Gold Smelter";
+            case "CoalGenerator": return "Coal Generator";
+            case "GearAssembler": return "Gear Assembler";
+            case "WireAssembler": return "Wire Assembler";
+            case "Refinery":      return "Refinery";
+            case "CircuitFab":    return "Circuit Fab";
+            case "FuelMixer":     return "Fuel Mixer";
+            case "HullPress":     return "Hull Press";
+            case "AutoMiner":     return "Auto Miner";
+            default:              return type;
         }
     }
 
