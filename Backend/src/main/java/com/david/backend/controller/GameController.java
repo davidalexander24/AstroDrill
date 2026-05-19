@@ -1,52 +1,55 @@
 package com.david.backend.controller;
 
-import com.david.backend.entity.Leaderboard;
-import com.david.backend.entity.Player;
+import com.david.backend.dto.LeaderboardEntryDto;
+import com.david.backend.dto.LoadResponse;
+import com.david.backend.dto.LoginRequest;
+import com.david.backend.dto.LoginResponse;
+import com.david.backend.dto.RegisterRequest;
+import com.david.backend.dto.SaveRequest;
+import com.david.backend.dto.SaveResponse;
+import com.david.backend.service.AuthService;
 import com.david.backend.service.GameService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/game")
 public class GameController {
 
+    private final AuthService authService;
     private final GameService gameService;
 
-    public GameController(GameService gameService) {
+    public GameController(AuthService authService, GameService gameService) {
+        this.authService = authService;
         this.gameService = gameService;
     }
 
+    @PostMapping("/register")
+    public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(req));
+    }
+
     @PostMapping("/login")
-    public Player login(@RequestParam String username) {
-        return gameService.loginOrRegister(username);
+    public LoginResponse login(@Valid @RequestBody LoginRequest req) {
+        return authService.login(req);
     }
 
     @PostMapping("/save")
-    public Map<String, String> saveProgress(@RequestBody Map<String, Object> req) {
-        String username = (String) req.get("username");
-        int credits = (int) req.get("credits");
-        String currentPlanet = (String) req.get("currentPlanet");
-        int maxDepthMined = (int) req.get("maxDepthMined");
+    public SaveResponse save(@Valid @RequestBody SaveRequest req) {
+        return gameService.saveProgress(req);
+    }
 
-        long fastestLaunchTime = 0;
-        if (req.containsKey("fastestLaunchTime")) {
-            Object flt = req.get("fastestLaunchTime");
-            if (flt instanceof Number) {
-                fastestLaunchTime = ((Number) flt).longValue();
-            } else {
-                fastestLaunchTime = Long.parseLong(flt.toString());
-            }
-        }
-
-        gameService.saveProgress(username, credits, currentPlanet, maxDepthMined, fastestLaunchTime);
-        return Map.of("status", "SUCCESS");
+    @GetMapping("/load/{playerId}")
+    public LoadResponse load(@PathVariable Long playerId) {
+        return gameService.loadProgress(playerId);
     }
 
     @GetMapping("/leaderboard")
-    public List<Leaderboard> getLeaderboard() {
+    public List<LeaderboardEntryDto> getLeaderboard() {
         return gameService.getTopLeaderboard();
     }
 }
-

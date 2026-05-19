@@ -1,7 +1,9 @@
 package com.david.astrodrill;
 
 import com.badlogic.gdx.Game;
+import com.david.astrodrill.screen.LeaderboardScreen;
 import com.david.astrodrill.screen.LoadingScreen;
+import com.david.astrodrill.screen.LoginScreen;
 import com.david.astrodrill.screen.MainMenuScreen;
 import com.david.astrodrill.screen.PlayScreen;
 import com.david.astrodrill.screen.FlightScreen;
@@ -21,12 +23,19 @@ public class GameManager {
     private boolean devUnlimited = false;
     private static final int DEV_RESOURCE_COUNT = 99999;
 
+    private float sfxVolume = 1.0f;
+    public float getSfxVolume() { return sfxVolume; }
+    public void setSfxVolume(float volume) { this.sfxVolume = volume; }
+
     private Game game;
     private Map<ItemType, Integer> globalVault = new HashMap<>();
     private List<VaultObserver> observers = new ArrayList<>();
 
+    private Long currentPlayerId;
+    private String currentUsername;
+
     public enum ScreenType {
-        LOADING, MAIN_MENU, PLAY, FLIGHT
+        LOADING, LOGIN, MAIN_MENU, LEADERBOARD, PLAY, FLIGHT
     }
 
     private GameManager() { }
@@ -59,8 +68,14 @@ public class GameManager {
             case LOADING:
                 game.setScreen(new LoadingScreen());
                 break;
+            case LOGIN:
+                game.setScreen(new LoginScreen());
+                break;
             case MAIN_MENU:
                 game.setScreen(new MainMenuScreen());
+                break;
+            case LEADERBOARD:
+                game.setScreen(new LeaderboardScreen());
                 break;
             case PLAY:
                 game.setScreen(new PlayScreen());
@@ -69,6 +84,45 @@ public class GameManager {
                 game.setScreen(new FlightScreen());
                 break;
         }
+    }
+
+    public Long getCurrentPlayerId() { return currentPlayerId; }
+    public String getCurrentUsername() { return currentUsername; }
+    public boolean isLoggedIn() { return currentPlayerId != null; }
+
+    public void setCurrentUser(Long playerId, String username) {
+        this.currentPlayerId = playerId;
+        this.currentUsername = username;
+    }
+
+    public void clearCurrentUser() {
+        this.currentPlayerId = null;
+        this.currentUsername = null;
+        this.globalVault.clear();
+        notifyObservers();
+    }
+
+    public Game getGame() { return game; }
+    public Map<ItemType, Integer> getGlobalVault() { return globalVault; }
+
+    /**
+     * One-shot slot for handing a loaded save blob from MainMenuScreen to a
+     * freshly-constructed PlayScreen. Consumed (cleared) by PlayScreen.show().
+     * Null means "start a new world".
+     */
+    private String pendingSaveBlob;
+    public String consumePendingSaveBlob() {
+        String s = pendingSaveBlob;
+        pendingSaveBlob = null;
+        return s;
+    }
+    public void setPendingSaveBlob(String blob) { this.pendingSaveBlob = blob; }
+    public boolean hasPendingSaveBlob() { return pendingSaveBlob != null; }
+
+    public void replaceGlobalVault(Map<ItemType, Integer> vault) {
+        this.globalVault.clear();
+        if (vault != null) this.globalVault.putAll(vault);
+        notifyObservers();
     }
 
     public void addItems(ItemType type, int amount) {

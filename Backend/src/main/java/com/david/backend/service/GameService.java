@@ -1,13 +1,21 @@
 package com.david.backend.service;
 
+import com.david.backend.dto.LeaderboardEntryDto;
+import com.david.backend.dto.LoadResponse;
+import com.david.backend.dto.SaveRequest;
+import com.david.backend.dto.SaveResponse;
 import com.david.backend.entity.Leaderboard;
 import com.david.backend.entity.Player;
 import com.david.backend.entity.SaveState;
+import com.david.backend.exception.PlayerNotFoundException;
+import com.david.backend.exception.SaveNotFoundException;
 import com.david.backend.repository.LeaderboardRepository;
 import com.david.backend.repository.PlayerRepository;
 import com.david.backend.repository.SaveStateRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,43 +34,55 @@ public class GameService {
         this.leaderboardRepository = leaderboardRepository;
     }
 
-    public Player loginOrRegister(String username) {
-        return playerRepository.findByUsername(username)
-                .orElseGet(() -> playerRepository.save(new Player(username)));
-    }
+    @Transactional
+    public SaveResponse saveProgress(SaveRequest req) {
+        Player player = playerRepository.findById(req.playerId())
+                .orElseThrow(() -> new PlayerNotFoundException(req.playerId()));
 
-    public void saveProgress(String username, int credits, String currentPlanet, int maxDepthMined, long fastestLaunchTime) {
-        Player player = loginOrRegister(username);
-
-        Optional<SaveState> saveStateOpt = saveStateRepository.findByPlayer(player);
-        SaveState saveState;
-        if (saveStateOpt.isPresent()) {
-            saveState = saveStateOpt.get();
-            saveState.setCredits(credits);
-            saveState.setCurrentPlanet(currentPlanet);
-        } else {
-            saveState = new SaveState(player, credits, currentPlanet);
-        }
+        Instant now = Instant.now();
+        SaveState saveState = saveStateRepository.findByPlayer(player)
+                .orElseGet(() -> new SaveState(player, req.credits(), req.currentPlanet(), req.data()));
+        saveState.setCredits(req.credits());
+        saveState.setCurrentPlanet(req.currentPlanet());
+        saveState.setData(req.data());
+        saveState.setUpdatedAt(now);
         saveStateRepository.save(saveState);
 
-        Optional<Leaderboard> leaderboardOpt = leaderboardRepository.findByPlayer(player);
-        Leaderboard leaderboard;
-        if (leaderboardOpt.isPresent()) {
-            leaderboard = leaderboardOpt.get();
-            if (maxDepthMined > leaderboard.getMaxDepthMined()) {
-                leaderboard.setMaxDepthMined(maxDepthMined);
-            }
-            if (fastestLaunchTime < leaderboard.getFastestLaunchTime() || leaderboard.getFastestLaunchTime() == 0) {
-                leaderboard.setFastestLaunchTime(fastestLaunchTime);
-            }
+        Leaderboard leaderboard = leaderboardRepository.findByPlayer(player).orElse(null);
+        if (leaderboard == null) {
+            leaderboard = new Leaderboard(player, req.maxDepthMined(), req.fastestLaunchTime());
         } else {
-            leaderboard = new Leaderboard(player, maxDepthMined, fastestLaunchTime);
+            if (req.maxDepthMined() > leaderboard.getMaxDepthMined()) {
+                leaderboard.setMaxDepthMined(req.maxDepthMined());
+            }
+            if (req.fastestLaunchTime() > 0
+                    && (leaderboard.getFastestLaunchTime() == 0
+                        || req.fastestLaunchTime() < leaderboard.getFastestLaunchTime())) {
+                leaderboard.setFastestLaunchTime(req.fastestLaunchTime());
+            }
         }
         leaderboardRepository.save(leaderboard);
+
+        return new SaveResponse(now);
     }
 
-    public List<Leaderboard> getTopLeaderboard() {
-        return leaderboardRepository.findTop10ByOrderByMaxDepthMinedDesc();
+    @Transactional(readOnly = true)
+    public LoadResponse loadProgress(Long playerId) {
+        Player player = playerRepository.findById(playerId)
+                .orElseThrow(() -> new PlayerNotFoundException(playerId));
+        SaveState saveState = saveStateRepository.findByPlayer(player)
+                .orElseThrow(() -> new SaveNotFoundException(playerId));
+        return new LoadResponse(player.getId(), player.getUsername(),
+                saveState.getData(), saveState.getUpdatedAt());
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaderboardEntryDto> getTopLeaderboard() {
+        return leaderboardRepository.findTop10ByOrderByMaxDepthMinedDesc().stream()
+                .map(lb -> new LeaderboardEntryDto(
+                        lb.getPlayer().getUsername(),
+                        lb.getMaxDepthMined(),
+                        lb.getFastestLaunchTime()))
+                .toList();
     }
 }
-

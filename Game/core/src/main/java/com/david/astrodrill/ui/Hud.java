@@ -13,9 +13,12 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
+import com.badlogic.gdx.scenes.scene2d.ui.Slider;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.Window;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
@@ -95,6 +98,10 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     // Dev toggle button
     private TextButton devToggleButton;
 
+    // Menu Popup
+    private Window menuPopup;
+    private Texture sliderBgTexture, sliderKnobTexture;
+
     public Hud(SpriteBatch batch) {
         stage = new Stage(new ScreenViewport(), batch);
         table = new Table();
@@ -118,6 +125,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         buildHotbarUI();
         buildBankingPopup();
         buildDevToggle();
+        buildMenuButton();
     }
 
     private void rebuildTable() {
@@ -659,7 +667,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private void buildDevToggle() {
         Table wrapper = new Table();
         wrapper.setFillParent(true);
-        wrapper.top().right();
+        wrapper.bottom().right();
         wrapper.setTouchable(Touchable.childrenOnly);
 
         TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
@@ -686,8 +694,109 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             }
         });
 
-        wrapper.add(devToggleButton).width(140).height(32).padTop(8).padRight(8);
+        wrapper.add(devToggleButton).width(140).height(32).padBottom(8).padRight(8);
         stage.addActor(wrapper);
+    }
+
+    private void buildMenuButton() {
+        sliderBgTexture = createSolidTexture(0.3f, 0.3f, 0.3f, 1f);
+        sliderKnobTexture = createSolidTexture(0.8f, 0.8f, 0.8f, 1f);
+
+        Table wrapper = new Table();
+        wrapper.setFillParent(true);
+        wrapper.top().right();
+        wrapper.setTouchable(Touchable.childrenOnly);
+
+        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
+        s.font = hubButtonFont; s.fontColor = Color.WHITE;
+        s.overFontColor = new Color(0.6f, 0.85f, 1f, 1f);
+        s.up = new TextureRegionDrawable(new TextureRegion(buttonUpTexture));
+        s.over = new TextureRegionDrawable(new TextureRegion(buttonOverTexture));
+        s.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
+
+        TextButton menuButton = new TextButton("MENU", s);
+        menuButton.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                showMenuPopup();
+            }
+        });
+
+        wrapper.add(menuButton).width(100).height(32).padTop(8).padRight(8);
+        stage.addActor(wrapper);
+    }
+
+    private void showMenuPopup() {
+        if (menuPopup != null) {
+            menuPopup.remove();
+            menuPopup = null;
+            return;
+        }
+
+        Window.WindowStyle ws = new Window.WindowStyle();
+        ws.titleFont = hubButtonFont;
+        ws.titleFontColor = new Color(1f, 0.85f, 0.4f, 1f);
+        ws.background = new TextureRegionDrawable(new TextureRegion(panelBgTexture));
+
+        final Window w = new Window("Menu", ws);
+        w.setModal(true);
+        w.setMovable(false);
+        w.padTop(40).padLeft(20).padRight(20).padBottom(20);
+        
+        TextButton.TextButtonStyle s = makeButtonStyle();
+        
+        TextButton resumeBtn = new TextButton("Resume", s);
+        resumeBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                if (menuPopup != null) menuPopup.remove();
+                menuPopup = null;
+            }
+        });
+        
+        TextButton saveAndExitBtn = new TextButton("Save & Exit", s);
+        saveAndExitBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                com.badlogic.gdx.Screen screen = GameManager.getInstance().getGame().getScreen();
+                if (screen instanceof com.david.astrodrill.screen.PlayScreen) {
+                    ((com.david.astrodrill.screen.PlayScreen) screen).requestSave(true);
+                }
+                GameManager.getInstance().changeScreen(GameManager.ScreenType.MAIN_MENU);
+            }
+        });
+
+        // Volume Slider
+        Slider.SliderStyle sliderStyle = new Slider.SliderStyle();
+        TextureRegionDrawable bg = new TextureRegionDrawable(new TextureRegion(sliderBgTexture));
+        bg.setMinHeight(10);
+        sliderStyle.background = bg;
+
+        TextureRegionDrawable knob = new TextureRegionDrawable(new TextureRegion(sliderKnobTexture));
+        knob.setMinWidth(24);
+        knob.setMinHeight(36);
+        sliderStyle.knob = knob;
+
+        final Slider volumeSlider = new Slider(0f, 1f, 0.05f, false, sliderStyle);
+        volumeSlider.setValue(GameManager.getInstance().getSfxVolume());
+        volumeSlider.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                GameManager.getInstance().setSfxVolume(volumeSlider.getValue());
+            }
+        });
+
+        Label.LabelStyle lblStyle = new Label.LabelStyle(hubSmallFont, Color.WHITE);
+        Label volumeLabel = new Label("SFX Volume", lblStyle);
+
+        w.add(volumeLabel).padBottom(4).row();
+        w.add(volumeSlider).width(240).padBottom(20).row();
+        
+        w.add(resumeBtn).width(240).height(48).pad(8).row();
+        w.add(saveAndExitBtn).width(240).height(48).pad(8).row();
+
+        w.pack();
+        w.setPosition((stage.getWidth() - w.getWidth()) / 2f,
+                      (stage.getHeight() - w.getHeight()) / 2f);
+        stage.addActor(w);
+        menuPopup = w;
     }
 
     private String devLabel() {
@@ -851,6 +960,8 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         if (tabInactiveTexture != null) tabInactiveTexture.dispose();
         if (slotBgTexture != null) slotBgTexture.dispose();
         if (slotActiveBgTexture != null) slotActiveBgTexture.dispose();
+        if (sliderBgTexture != null) sliderBgTexture.dispose();
+        if (sliderKnobTexture != null) sliderKnobTexture.dispose();
         stage.dispose();
     }
 }

@@ -9,14 +9,21 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.RandomXS128;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
+import com.badlogic.gdx.audio.Sound;
 import com.david.astrodrill.entity.Block;
 import com.david.astrodrill.entity.Block.BlockType;
 import com.david.astrodrill.entity.Player;
 import com.david.astrodrill.item.ItemType;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.david.astrodrill.network.BackendClient;
+import com.david.astrodrill.network.BackendException;
+import com.david.astrodrill.network.SaveStateSerializer;
+import com.david.astrodrill.network.dto.SaveRequest;
+import com.david.astrodrill.network.dto.SaveResponse;
 import com.david.astrodrill.ui.Hud;
 import com.david.astrodrill.machine.Machine;
 import com.david.astrodrill.machine.MachineFactory;
@@ -51,9 +58,15 @@ public class PlayScreen implements Screen {
     private Vector3 pendingRightClick = null;
     private BitmapFont machineFont;
     private Rectangle placementCheck = new Rectangle();
+    private Sound mineSound;
+    private Sound placeSound;
 
     // Auto-banking: only bank once per zone entry
     private boolean hasbankedThisEntry = false;
+
+    // Save status
+    private int sessionMaxDepth = 0;
+    private boolean savingInFlight = false;
 
     private final Pool<Block> blockPool = new Pool<Block>() {
         @Override
@@ -74,6 +87,17 @@ public class PlayScreen implements Screen {
     private static final int HUB_COL_END = 53;
     private static final int HUB_FOUNDATION_DEPTH = 0;
 
+    public static final int COLS_PUBLIC = COLS;
+    public static final int ROWS_PUBLIC = ROWS;
+    public static final float BLOCK_SIZE_PUBLIC = BLOCK_SIZE;
+
+    private long worldSeed;
+    public long getWorldSeed() { return worldSeed; }
+    public Array<Block> getActiveBlocks() { return activeBlocks; }
+    public LanderHub getLanderHub() { return landerHub; }
+    public Player getPlayer() { return player; }
+    public Pool<Block> getBlockPool() { return blockPool; }
+
     @Override
     public void show() {
         camera = new OrthographicCamera();
@@ -81,7 +105,11 @@ public class PlayScreen implements Screen {
         batch = new SpriteBatch();
         hud = new Hud(batch);
 
-        generateWorld();
+        String pending = GameManager.getInstance().consumePendingSaveBlob();
+        SaveStateSerializer.GameSaveDto dto = pending != null ? SaveStateSerializer.parse(pending) : null;
+
+        long seed = (dto != null && dto.world != null) ? dto.world.seed : System.currentTimeMillis();
+        generateWorld(seed);
 
         landerHub = new LanderHub(49f, 1f, 3f, 3f);
 
@@ -94,12 +122,19 @@ public class PlayScreen implements Screen {
         machineFont = gen.generateFont(machineParam);
         gen.dispose();
 
+        mineSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Mine.wav"));
+        placeSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Place.wav"));
+
         player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
         hud.setPlayer(player);
         hud.setLanderHub(landerHub);
 
         GameManager.getInstance().addObserver(hud);
+
+        if (dto != null) {
+            restoreFromDto(dto);
+        }
 
         inputMultiplexer = new InputMultiplexer();
         inputMultiplexer.addProcessor(hud.stage);
@@ -129,7 +164,9 @@ public class PlayScreen implements Screen {
         Gdx.input.setInputProcessor(inputMultiplexer);
     }
 
-    private void generateWorld() {
+    private void generateWorld(long seed) {
+        this.worldSeed = seed;
+        RandomXS128 rng = new RandomXS128(seed);
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
                 Block block = blockPool.obtain();
@@ -140,20 +177,20 @@ public class PlayScreen implements Screen {
                 } else if (r == 0) {
                     type = BlockType.DIRT;
                 } else if (r < 50) {
-                    float chance = (float) Math.random();
+                    float chance = rng.nextFloat();
                     if (chance < 0.03f) type = BlockType.IRON_ORE;
                     else if (chance < 0.08f) type = BlockType.COPPER_ORE;
                     else if (chance < 0.15f) type = BlockType.COAL_ORE;
                     else if (chance < 0.30f) type = BlockType.STONE;
                     else type = BlockType.DIRT;
                 } else if (r < 150) {
-                    float chance = (float) Math.random();
+                    float chance = rng.nextFloat();
                     if (chance < 0.04f) type = BlockType.GOLD_ORE;
                     else if (chance < 0.10f) type = BlockType.SILICON_ORE;
                     else if (chance < 0.25f) type = BlockType.STONE;
                     else type = BlockType.BASALT;
                 } else {
-                    float chance = (float) Math.random();
+                    float chance = rng.nextFloat();
                     if (chance < 0.15f) type = BlockType.URANIUM_ORE;
                     else type = BlockType.OBSIDIAN;
                 }
@@ -308,6 +345,15 @@ public class PlayScreen implements Screen {
             }
         }
 
+        // ── Manual Save (F5) ────────────────────────────────────────────
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) {
+            requestSave(false);
+        }
+
+        // Track session max depth (positive number — deeper = larger).
+        int curDepth = Math.max(0, (int) Math.floor(-player.y));
+        if (curDepth > sessionMaxDepth) sessionMaxDepth = curDepth;
+
         // ── Camera Zoom (+/-): smaller zoom = closer in ──────────────────
         if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.PLUS)) {
             camera.zoom = Math.max(MIN_ZOOM, camera.zoom - ZOOM_STEP);
@@ -404,6 +450,7 @@ public class PlayScreen implements Screen {
 
                 Block.BlockType mined = mineBlockAt(tx, ty);
                 if (mined != null) {
+                    mineSound.play(GameManager.getInstance().getSfxVolume());
                     player.addBlockToInventory(mined);
                     // Scale cooldown inversely to speed so a wheel-upgraded player
                     // doesn't outrun their drill. 0.85 / speed keeps mining ~15% faster
@@ -561,11 +608,148 @@ public class PlayScreen implements Screen {
     @Override
     public void dispose() {
         if (machineFont != null) machineFont.dispose();
+        if (mineSound != null) mineSound.dispose();
+        if (placeSound != null) placeSound.dispose();
         shapeRenderer.dispose();
         batch.dispose();
         hud.dispose();
         for (Block block : activeBlocks) blockPool.free(block);
         activeBlocks.clear();
+    }
+
+    /**
+     * Manually save the current game state to the backend. Async — toast is shown
+     * on completion. Pass `silent=true` to suppress the success toast (e.g. during
+     * save-on-exit).
+     */
+    public void requestSave(boolean silent) {
+        Long pid = GameManager.getInstance().getCurrentPlayerId();
+        if (pid == null) {
+            if (!silent) hud.showBankingPopup("Not logged in — cannot save");
+            return;
+        }
+        if (savingInFlight) {
+            if (!silent) hud.showBankingPopup("Save already in progress...");
+            return;
+        }
+        savingInFlight = true;
+        if (!silent) hud.showBankingPopup("Saving...");
+
+        String json = SaveStateSerializer.snapshot(this, player, landerHub);
+        SaveRequest req = new SaveRequest(
+                pid, json, 0, "PROXIMA_B", sessionMaxDepth, 0L);
+
+        BackendClient.save(req, new BackendClient.Callback<SaveResponse>() {
+            @Override
+            public void onSuccess(SaveResponse result) {
+                savingInFlight = false;
+                if (!silent) hud.showBankingPopup("Saved.");
+            }
+
+            @Override
+            public void onError(BackendException ex) {
+                savingInFlight = false;
+                hud.showBankingPopup("Save failed: " + ex.getMessage());
+            }
+        });
+    }
+
+    public boolean isSavingInFlight() { return savingInFlight; }
+    public int getSessionMaxDepth() { return sessionMaxDepth; }
+
+    /**
+     * Restores the world to match a previously-saved snapshot. Must be called after
+     * generateWorld(seed) and after the player+hub+hud are constructed. World state
+     * is reapplied through the normal placeBlock/mining codepaths so the BEDROCK,
+     * isPlayerPlaced, and isDestructible invariants from CLAUDE.md remain enforced.
+     */
+    private void restoreFromDto(SaveStateSerializer.GameSaveDto dto) {
+        // Player
+        if (dto.player != null) {
+            player.x = dto.player.x;
+            player.y = dto.player.y;
+            player.bounds.x = player.x;
+            player.bounds.y = player.y;
+            player.drillStrength = dto.player.drillStrength;
+            player.batteryTier = dto.player.batteryTier;
+            player.jetpackTier = dto.player.jetpackTier;
+            player.wheelTier = dto.player.wheelTier;
+            player.applyBatteryUpgrade();
+            player.applyJetpackUpgrade();
+            player.applyWheelUpgrade();
+            player.currentBattery = Math.min(dto.player.currentBattery, player.maxBattery);
+            player.activeSlot = Math.min(Math.max(0, dto.player.activeSlot), Player.HOTBAR_SLOTS - 1);
+
+            player.inventory.clear();
+            player.inventory.putAll(SaveStateSerializer.stringMapToBlockEnum(dto.player.inventory));
+            player.machineInventory.clear();
+            player.machineInventory.putAll(SaveStateSerializer.stringMapToItemEnum(dto.player.machineInventory));
+        }
+
+        // Vault
+        GameManager.getInstance().replaceGlobalVault(
+                SaveStateSerializer.stringMapToItemEnum(dto.globalVault));
+
+        // Hub
+        if (dto.hub != null) {
+            landerHub.x = dto.hub.x;
+            landerHub.y = dto.hub.y;
+            landerHub.width = dto.hub.width;
+            landerHub.height = dto.hub.height;
+            landerHub.tier = Math.max(1, dto.hub.tier);
+        }
+
+        // World — apply mined deletions and placed additions on top of the regenerated world
+        if (dto.world != null) {
+            if (dto.world.minedCells != null) {
+                for (int[] cell : dto.world.minedCells) {
+                    if (cell == null || cell.length < 2) continue;
+                    removeBlockAtCell(cell[0], cell[1], false);
+                }
+            }
+            if (dto.world.placedBlocks != null) {
+                for (SaveStateSerializer.PlacedBlockDto pb : dto.world.placedBlocks) {
+                    if (pb == null || pb.type == null) continue;
+                    BlockType type;
+                    try { type = BlockType.valueOf(pb.type); } catch (IllegalArgumentException ex) { continue; }
+                    removeBlockAtCell(pb.col, pb.row, true);
+                    Block b = blockPool.obtain();
+                    b.init(pb.col * BLOCK_SIZE, -pb.row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, type, true);
+                    activeBlocks.add(b);
+                }
+            }
+            if (dto.world.machines != null) {
+                for (SaveStateSerializer.MachineDto md : dto.world.machines) {
+                    if (md == null || md.type == null) continue;
+                    Machine m = MachineFactory.createMachine(md.type, md.x, md.y);
+                    if (m == null) continue;
+                    m.processTimer = md.processTimer;
+                    m.userDisabled = md.userDisabled;
+                    activeMachines.add(m);
+                }
+            }
+        }
+
+        player.rebuildHotbar();
+    }
+
+    /**
+     * Removes any block currently at the given (col,row), respecting bedrock when
+     * allowBedrock=false. Used during save restoration only.
+     */
+    private void removeBlockAtCell(int col, int row, boolean allowBedrock) {
+        for (int i = 0; i < activeBlocks.size; i++) {
+            Block b = activeBlocks.get(i);
+            if (!b.active) continue;
+            int bc = Math.round(b.x / BLOCK_SIZE);
+            int br = Math.round(-b.y / BLOCK_SIZE);
+            if (bc == col && br == row) {
+                if (!allowBedrock && b.type == BlockType.BEDROCK) return;
+                activeBlocks.removeIndex(i);
+                blockPool.free(b);
+                return;
+            }
+        }
     }
 
     // ── Sandbox Construction Helpers ──────────────────────────────────────
@@ -613,6 +797,7 @@ public class PlayScreen implements Screen {
         Machine machine = MachineFactory.createMachine(key, gx, gy);
         if (machine != null) {
             activeMachines.add(machine);
+            placeSound.play(GameManager.getInstance().getSfxVolume());
         } else {
             player.addMachineToHotbar(machineType); // refund on failure
         }
@@ -649,6 +834,7 @@ public class PlayScreen implements Screen {
         Block block = blockPool.obtain();
         block.init(gx, gy, BLOCK_SIZE, BLOCK_SIZE, type, true); // isPlayerPlaced = true
         activeBlocks.add(block);
+        placeSound.play(GameManager.getInstance().getSfxVolume());
     }
 
     /**
@@ -665,6 +851,7 @@ public class PlayScreen implements Screen {
                 player.addBlockToInventory(b.type);
                 activeBlocks.removeIndex(i);
                 blockPool.free(b);
+                mineSound.play(GameManager.getInstance().getSfxVolume());
                 return;
             }
         }
@@ -679,6 +866,7 @@ public class PlayScreen implements Screen {
                     player.addMachineToHotbar(machineItem);
                 }
                 it.remove();
+                mineSound.play(GameManager.getInstance().getSfxVolume());
                 return;
             }
         }

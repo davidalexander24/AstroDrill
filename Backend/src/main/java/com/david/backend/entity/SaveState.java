@@ -2,6 +2,8 @@ package com.david.backend.entity;
 
 import jakarta.persistence.*;
 
+import java.time.Instant;
+
 @Entity
 public class SaveState {
     @Id
@@ -15,12 +17,20 @@ public class SaveState {
     private int credits;
     private String currentPlanet;
 
+    @Column(columnDefinition = "TEXT")
+    private String data;
+
+    @Column
+    private Instant updatedAt;
+
     public SaveState() {}
 
-    public SaveState(Player player, int credits, String currentPlanet) {
+    public SaveState(Player player, int credits, String currentPlanet, String data) {
         this.player = player;
         this.credits = credits;
         this.currentPlanet = currentPlanet;
+        this.data = data;
+        this.updatedAt = Instant.now();
     }
 
     public Long getId() { return id; }
@@ -34,5 +44,10 @@ public class SaveState {
 
     public String getCurrentPlanet() { return currentPlanet; }
     public void setCurrentPlanet(String currentPlanet) { this.currentPlanet = currentPlanet; }
-}
 
+    public String getData() { return data; }
+    public void setData(String data) { this.data = data; }
+
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+}
