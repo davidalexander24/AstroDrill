@@ -48,6 +48,10 @@ public class UpgradeDefinition {
             mapOf(ItemType.IRON_GEAR, 10),
             mapOf(ItemType.IRON_GEAR, 15, ItemType.COPPER_WIRE, 10)),
 
+        new UpgradeDefinition("WHEEL", "Wheel Speed",
+            mapOf(ItemType.IRON_INGOT, 6, ItemType.COPPER_INGOT, 4),
+            mapOf(ItemType.IRON_GEAR, 6, ItemType.COPPER_WIRE, 6)),
+
         new UpgradeDefinition("HUB", "Hub Tier",
             mapOf(ItemType.IRON_INGOT, 20, ItemType.COPPER_INGOT, 10),
             mapOf(ItemType.CIRCUIT_BOARD, 5, ItemType.IRON_GEAR, 20)),

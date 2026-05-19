@@ -66,6 +66,10 @@ public class PlayScreen implements Screen {
     private static final int ROWS = 300;
     private static final float BLOCK_SIZE = 1f;
 
+    private static final float MIN_ZOOM = 0.5f;
+    private static final float MAX_ZOOM = 2.0f;
+    private static final float ZOOM_STEP = 0.1f;
+
     private static final int HUB_COL_START = 47;
     private static final int HUB_COL_END = 53;
     private static final int HUB_FOUNDATION_DEPTH = 0;
@@ -202,12 +206,98 @@ public class PlayScreen implements Screen {
         return null;
     }
 
+    /**
+     * Substepped X movement + collision. Returns true if any collision was hit
+     * (used by horizontal mining to detect "pressed against a wall").
+     */
+    private boolean substepAxisX(float totalDx, float worldMaxX) {
+        boolean blocked = false;
+        int steps = Math.max(1, (int) Math.ceil(Math.abs(totalDx) / 0.1f));
+        float stepDx = totalDx / steps;
+        for (int s = 0; s < steps; s++) {
+            if (stepDx == 0f) break;
+            player.x += stepDx;
+            if (player.x < 0f) { player.x = 0f; player.velocityX = 0f; stepDx = 0f; blocked = true; }
+            if (player.x > worldMaxX) { player.x = worldMaxX; player.velocityX = 0f; stepDx = 0f; blocked = true; }
+            player.bounds.x = player.x;
+            for (Block block : activeBlocks) {
+                if (!block.active || !player.bounds.overlaps(block.bounds)) continue;
+                float blockLeft = block.bounds.x;
+                float blockRight = block.bounds.x + block.bounds.width;
+                boolean straddleLeft  = (player.x < blockLeft)  && (player.x + player.width  > blockLeft);
+                boolean straddleRight = (player.x < blockRight) && (player.x + player.width  > blockRight);
+                if (straddleRight && !straddleLeft) {
+                    player.x = blockRight;                  // came from the right
+                } else if (straddleLeft && !straddleRight) {
+                    player.x = blockLeft - player.width;    // came from the left
+                } else if (player.velocityX > 0) {
+                    player.x = blockLeft - player.width;
+                } else if (player.velocityX < 0) {
+                    player.x = blockRight;
+                }
+                player.bounds.x = player.x;
+                player.velocityX = 0f;
+                stepDx = 0f;
+                blocked = true;
+                break;
+            }
+        }
+        return blocked;
+    }
+
+    /** Substepped Y movement + collision. Same shape as the X version. */
+    private void substepAxisY(float totalDy) {
+        int steps = Math.max(1, (int) Math.ceil(Math.abs(totalDy) / 0.1f));
+        float stepDy = totalDy / steps;
+        for (int s = 0; s < steps; s++) {
+            if (stepDy == 0f) break;
+            player.y += stepDy;
+            player.bounds.y = player.y;
+            for (Block block : activeBlocks) {
+                if (!block.active || !player.bounds.overlaps(block.bounds)) continue;
+                float blockBottom = block.bounds.y;
+                float blockTop = block.bounds.y + block.bounds.height;
+                boolean straddleBottom = (player.y < blockBottom) && (player.y + player.height > blockBottom);
+                boolean straddleTop    = (player.y < blockTop)    && (player.y + player.height > blockTop);
+                if (straddleTop && !straddleBottom) {
+                    player.y = blockTop;                       // landed from above
+                } else if (straddleBottom && !straddleTop) {
+                    player.y = blockBottom - player.height;    // bonked from below
+                } else if (player.velocityY > 0) {
+                    player.y = blockBottom - player.height;
+                } else if (player.velocityY < 0) {
+                    player.y = blockTop;
+                }
+                player.bounds.y = player.y;
+                player.velocityY = 0f;
+                stepDy = 0f;
+                break;
+            }
+        }
+    }
+
+    /**
+     * Non-destructive lookup: returns the type of the block directly below the
+     * machine (used by AutoMiner). Returns null for empty cells, bedrock, or
+     * player-placed blocks. The block is NOT removed — the AutoMiner taps the
+     * resource without consuming it.
+     */
+    public Block.BlockType peekBlockTypeBelow(Machine m) {
+        Block target = findBlockAt(m.x + m.width / 2f, m.y - 0.1f);
+        if (target == null || !target.isDestructible || target.isPlayerPlaced) return null;
+        return target.type;
+    }
+
     private float drillTooWeakCooldown = 0f;
 
     @Override
     public void render(float delta) {
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        // Cap delta so a huge first-frame (asset loading) can't tunnel the player
+        // through the terrain before collision has a chance to catch them.
+        if (delta > 0.05f) delta = 0.05f;
 
         player.update(delta);
 
@@ -216,6 +306,14 @@ public class PlayScreen implements Screen {
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
                 player.setActiveSlot(i);
             }
+        }
+
+        // ── Camera Zoom (+/-): smaller zoom = closer in ──────────────────
+        if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.PLUS)) {
+            camera.zoom = Math.max(MIN_ZOOM, camera.zoom - ZOOM_STEP);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS)) {
+            camera.zoom = Math.min(MAX_ZOOM, camera.zoom + ZOOM_STEP);
         }
 
         // ── Sandbox Click: Placement / Deconstruction (with radius check) ──
@@ -242,7 +340,8 @@ public class PlayScreen implements Screen {
                     if (Math.abs(m.x - pendingRightClick.x) < 0.01f
                             && Math.abs(m.y - pendingRightClick.y) < 0.01f) {
                         m.userDisabled = !m.userDisabled;
-                        hud.showBankingPopup(m.userDisabled ? "Machine OFF" : "Machine ON");
+                        String name = formatMachineName(m.getMachineType());
+                        hud.showBankingPopup(name + (m.userDisabled ? " OFF" : " ON"));
                         break;
                     }
                 }
@@ -271,41 +370,14 @@ public class PlayScreen implements Screen {
 
         hud.setHubPanelVisible(player.isInHubZone);
 
-        // X-axis movement and collision
-        player.x += player.velocityX * delta;
-        player.bounds.x = player.x;
-
-        boolean blockedX = false;
-        for (Block block : activeBlocks) {
-            if (block.active && player.bounds.overlaps(block.bounds)) {
-                blockedX = true;
-                if (player.velocityX > 0) {
-                    player.x = block.bounds.x - player.width;
-                } else if (player.velocityX < 0) {
-                    player.x = block.bounds.x + block.bounds.width;
-                }
-                player.bounds.x = player.x;
-                player.velocityX = 0;
-                break;
-            }
-        }
-
-        // Y-axis movement and collision
-        player.y += player.velocityY * delta;
-        player.bounds.y = player.y;
-
-        for (Block block : activeBlocks) {
-            if (block.active && player.bounds.overlaps(block.bounds)) {
-                if (player.velocityY < 0) {
-                    player.y = block.bounds.y + block.bounds.height;
-                } else if (player.velocityY > 0) {
-                    player.y = block.bounds.y - player.height;
-                }
-                player.bounds.y = player.y;
-                player.velocityY = 0;
-                break;
-            }
-        }
+        // Substepped axis-separated collision. We move in <=0.1-unit slices so the player
+        // can't tunnel a full cell, and decide push direction from overlap geometry
+        // (which edge does the player straddle?) so the resolver works even when the
+        // previous position was already invalid. Falls back to velocity sign only when
+        // the player is fully inside a block (player height 0.8 < block height 1.0).
+        float worldMaxX = COLS * BLOCK_SIZE - player.width;
+        boolean blockedX = substepAxisX(player.velocityX * delta, worldMaxX);
+        substepAxisY(player.velocityY * delta);
 
         // Mining logic (drill never breaks player-placed blocks — enforced in mineBlockAt)
         drillTooWeakCooldown -= delta;
@@ -333,7 +405,10 @@ public class PlayScreen implements Screen {
                 Block.BlockType mined = mineBlockAt(tx, ty);
                 if (mined != null) {
                     player.addBlockToInventory(mined);
-                    digTimer = 0.20f;
+                    // Scale cooldown inversely to speed so a wheel-upgraded player
+                    // doesn't outrun their drill. 0.85 / speed keeps mining ~15% faster
+                    // than 1-block walk time at every wheel tier.
+                    digTimer = 0.85f / player.speed;
                 }
             }
         }
@@ -353,30 +428,37 @@ public class PlayScreen implements Screen {
             }
         }
 
-        // Power Grid: CoalGenerators self-power; all other machines check adjacency in their own update()
-        for (Machine m : activeMachines) {
-            if (m instanceof CoalGenerator) {
-                m.isPowered = ((CoalGenerator) m).isActive();
-            }
-            // Non-generator machines set their own isPowered in update() via hasAdjacentPower()
-        }
-
-        // Machine Update (no gravity — machines are static grid objects)
+        // Machine Update — two phases so CoalGenerator can read this frame's wantsPower from neighbors.
+        // Phase 1: consumers. They set wantsPower based on their inputs, then process if powered.
         for (Machine machine : activeMachines) {
+            if (machine instanceof CoalGenerator) continue;
             try {
                 machine.update(delta, this);
             } catch (Exception ex) {
                 Gdx.app.error("PlayScreen", "Machine update failed: " + machine.getMachineType(), ex);
             }
         }
+        // Phase 2: generators. Burn coal proportional to adjacent demand set in Phase 1.
+        for (Machine machine : activeMachines) {
+            if (!(machine instanceof CoalGenerator)) continue;
+            try {
+                machine.update(delta, this);
+            } catch (Exception ex) {
+                Gdx.app.error("PlayScreen", "CoalGenerator update failed", ex);
+            }
+        }
 
         // Camera
         camera.position.x = player.x;
         camera.position.y = player.y;
-        float halfViewW = camera.viewportWidth / 2f;
+        float halfViewW = camera.viewportWidth * camera.zoom / 2f;
         float worldWidth = COLS * BLOCK_SIZE;
-        if (camera.position.x < halfViewW) camera.position.x = halfViewW;
-        if (camera.position.x > worldWidth - halfViewW) camera.position.x = worldWidth - halfViewW;
+        if (worldWidth > halfViewW * 2f) {
+            if (camera.position.x < halfViewW) camera.position.x = halfViewW;
+            if (camera.position.x > worldWidth - halfViewW) camera.position.x = worldWidth - halfViewW;
+        } else {
+            camera.position.x = worldWidth / 2f;
+        }
         camera.update();
         shapeRenderer.setProjectionMatrix(camera.combined);
 
@@ -620,6 +702,25 @@ public class PlayScreen implements Screen {
             case "FuelMixer":     return on ? new Color(0.5f, 1f, 0.3f, 1f)   : new Color(0.2f, 0.45f, 0.12f, 1f);
             case "HullPress":     return on ? new Color(0.7f, 0.7f, 0.85f, 1f) : new Color(0.3f, 0.3f, 0.4f, 1f);
             default:              return new Color(0.5f, 0.5f, 0.5f, 1f);
+        }
+    }
+
+    /** Pretty name for popups: "IronSmelter" → "Iron Smelter". */
+    private static String formatMachineName(String type) {
+        if (type == null) return "Machine";
+        switch (type) {
+            case "IronSmelter":   return "Iron Smelter";
+            case "CopperSmelter": return "Copper Smelter";
+            case "GoldSmelter":   return "Gold Smelter";
+            case "CoalGenerator": return "Coal Generator";
+            case "GearAssembler": return "Gear Assembler";
+            case "WireAssembler": return "Wire Assembler";
+            case "Refinery":      return "Refinery";
+            case "CircuitFab":    return "Circuit Fab";
+            case "FuelMixer":     return "Fuel Mixer";
+            case "HullPress":     return "Hull Press";
+            case "AutoMiner":     return "Auto Miner";
+            default:              return type;
         }
     }
 

@@ -15,6 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.Window;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
@@ -70,9 +71,12 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private BitmapFont hubTitleFont, hubButtonFont, hubSmallFont;
 
     // Tab state
-    private enum HubTab { UPGRADES, MANUFACTURING }
+    private enum HubTab { UPGRADES, MANUFACTURING, LAUNCH }
     private HubTab activeTab = HubTab.UPGRADES;
     private Table hubContentArea;
+
+    // Recipe info popup (one at a time)
+    private Window activeInfoPopup;
 
     // Hotbar
     private Table hotbarWrapper, hotbarTable;
@@ -87,6 +91,9 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private Label bankingPopupLabel;
     private float bankingPopupTimer = 0f;
     private BitmapFont bankingFont;
+
+    // Dev toggle button
+    private TextButton devToggleButton;
 
     public Hud(SpriteBatch batch) {
         stage = new Stage(new ScreenViewport(), batch);
@@ -110,6 +117,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         buildHubPanel();
         buildHotbarUI();
         buildBankingPopup();
+        buildDevToggle();
     }
 
     private void rebuildTable() {
@@ -187,23 +195,34 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         tabStyle.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
 
         TextButton upgradesTab = new TextButton("Upgrades", tabStyle);
-        TextButton mfgTab = new TextButton("Manufacturing", tabStyle);
+        TextButton mfgTab = new TextButton("Crafting", tabStyle);
+        TextButton launchTab = new TextButton("Launch", tabStyle);
 
         upgradesTab.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                closeRecipeInfoPopup();
                 activeTab = HubTab.UPGRADES;
                 rebuildHubContent();
             }
         });
         mfgTab.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                closeRecipeInfoPopup();
                 activeTab = HubTab.MANUFACTURING;
                 rebuildHubContent();
             }
         });
+        launchTab.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                closeRecipeInfoPopup();
+                activeTab = HubTab.LAUNCH;
+                rebuildHubContent();
+            }
+        });
 
-        tabRow.add(upgradesTab).width(130).height(36).pad(2);
-        tabRow.add(mfgTab).width(130).height(36).pad(2);
+        tabRow.add(upgradesTab).width(88).height(36).pad(2);
+        tabRow.add(mfgTab).width(88).height(36).pad(2);
+        tabRow.add(launchTab).width(88).height(36).pad(2);
         outerPanel.add(tabRow).colspan(2).padBottom(6).row();
 
         // Separator
@@ -235,8 +254,10 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         hubContentArea.clear();
         if (activeTab == HubTab.UPGRADES) {
             buildUpgradesContent();
-        } else {
+        } else if (activeTab == HubTab.MANUFACTURING) {
             buildManufacturingContent();
+        } else {
+            buildLaunchContent();
         }
     }
 
@@ -297,6 +318,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             case "DRILL":   return player.drillStrength;
             case "BATTERY": return player.batteryTier;
             case "JETPACK": return player.jetpackTier;
+            case "WHEEL":   return player.wheelTier;
             case "HUB":     return (landerHub != null) ? landerHub.tier : 1;
             default:        return 1;
         }
@@ -330,6 +352,10 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
                 player.jetpackTier++;
                 player.applyJetpackUpgrade();
                 break;
+            case "WHEEL":
+                player.wheelTier++;
+                player.applyWheelUpgrade();
+                break;
             case "HUB":
                 if (landerHub != null) landerHub.upgradeTier();
                 break;
@@ -348,10 +374,15 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         Label.LabelStyle lockedStyle = new Label.LabelStyle(hubSmallFont, new Color(0.5f, 0.5f, 0.5f, 1f));
 
         for (MachineRecipe recipe : MachineRecipe.getAllRecipes()) {
+            final MachineRecipe rForInfo = recipe;
+
             // Tier gate
             if (recipe.requiredHubTier > hubTier) {
-                hubContentArea.add(new Label(recipe.displayName + " [Tier " + recipe.requiredHubTier + "]", lockedStyle))
-                    .fillX().padBottom(6).row();
+                Table lockedRow = new Table();
+                lockedRow.add(new Label(recipe.displayName + " [Tier " + recipe.requiredHubTier + "]", lockedStyle))
+                    .expandX().left();
+                lockedRow.add(makeInfoButton(rForInfo)).width(28).height(24).padRight(2);
+                hubContentArea.add(lockedRow).fillX().padBottom(6).row();
                 continue;
             }
 
@@ -366,8 +397,11 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
                 costText.append(formatItemName(entry.getKey())).append(": ").append(have).append("/").append(need);
             }
 
-            // Machine name
-            hubContentArea.add(new Label(recipe.displayName, nameStyle)).fillX().padTop(4).row();
+            // Machine name + info button
+            Table nameRow = new Table();
+            nameRow.add(new Label(recipe.displayName, nameStyle)).expandX().left().padTop(4);
+            nameRow.add(makeInfoButton(rForInfo)).width(28).height(24).padTop(4).padRight(2);
+            hubContentArea.add(nameRow).fillX().row();
 
             // Cost line
             Label costLabel = new Label(costText.toString(), canAfford ? costOkStyle : costBadStyle);
@@ -410,6 +444,107 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             showBankingPopup("Crafted: " + recipe.displayName);
         }
         rebuildHubContent();
+    }
+
+    private void buildLaunchContent() {
+        GameManager gm = GameManager.getInstance();
+
+        final int needFuel = 20, needPlate = 10, needChip = 5;
+        int haveFuel  = gm.getItemCount(ItemType.ROCKET_FUEL);
+        int havePlate = gm.getItemCount(ItemType.HULL_PLATING);
+        int haveChip  = gm.getItemCount(ItemType.CIRCUIT_BOARD);
+
+        Label.LabelStyle titleStyle = new Label.LabelStyle(hubButtonFont, new Color(1f, 0.85f, 0.4f, 1f));
+        Label.LabelStyle okStyle    = new Label.LabelStyle(hubButtonFont, new Color(0.3f, 1f, 0.4f, 1f));
+        Label.LabelStyle badStyle   = new Label.LabelStyle(hubButtonFont, new Color(1f, 0.4f, 0.4f, 1f));
+        Label.LabelStyle hintStyle  = new Label.LabelStyle(hubSmallFont,  new Color(0.7f, 0.7f, 0.7f, 1f));
+
+        hubContentArea.add(new Label("ROCKET LAUNCH", titleStyle)).fillX().padTop(4).padBottom(8).row();
+        hubContentArea.add(new Label("Required Cargo:", hintStyle)).fillX().padBottom(4).row();
+
+        addRequirementRow("Rocket Fuel",   haveFuel,  needFuel,  okStyle, badStyle);
+        addRequirementRow("Hull Plating",  havePlate, needPlate, okStyle, badStyle);
+        addRequirementRow("Circuit Board", haveChip,  needChip,  okStyle, badStyle);
+
+        boolean ready = haveFuel >= needFuel && havePlate >= needPlate && haveChip >= needChip;
+
+        if (ready) {
+            TextButton launchBtn = new TextButton("LAUNCH", makeButtonStyle());
+            launchBtn.addListener(new ClickListener() {
+                @Override public void clicked(InputEvent e, float x, float y) {
+                    GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
+                }
+            });
+            hubContentArea.add(launchBtn).fillX().height(44).padTop(12).padBottom(6).row();
+            hubContentArea.add(new Label("(or press L)", hintStyle)).fillX().padBottom(4).row();
+        } else {
+            hubContentArea.add(new Label("Build the production chain:", hintStyle))
+                .fillX().padTop(10).padBottom(2).row();
+            if (haveFuel  < needFuel)  hubContentArea.add(new Label("- Fuel Mixer (Hub Tier 3)",  hintStyle)).fillX().padLeft(8).row();
+            if (havePlate < needPlate) hubContentArea.add(new Label("- Hull Press (Hub Tier 3)",  hintStyle)).fillX().padLeft(8).row();
+            if (haveChip  < needChip)  hubContentArea.add(new Label("- Circuit Fab (Hub Tier 2)", hintStyle)).fillX().padLeft(8).row();
+        }
+    }
+
+    private void addRequirementRow(String name, int have, int need, Label.LabelStyle okStyle, Label.LabelStyle badStyle) {
+        boolean met = have >= need;
+        String mark = met ? "[OK]" : "[ ]";
+        Label row = new Label(mark + "  " + name + ":  " + have + " / " + need,
+                              met ? okStyle : badStyle);
+        hubContentArea.add(row).fillX().padLeft(8).padBottom(4).row();
+    }
+
+    private TextButton makeInfoButton(final MachineRecipe recipe) {
+        TextButton btn = new TextButton("?", makeButtonStyle());
+        btn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                showRecipeInfoPopup(recipe);
+            }
+        });
+        return btn;
+    }
+
+    private void showRecipeInfoPopup(MachineRecipe recipe) {
+        closeRecipeInfoPopup();
+
+        Window.WindowStyle ws = new Window.WindowStyle();
+        ws.titleFont = hubButtonFont;
+        ws.titleFontColor = new Color(1f, 0.85f, 0.4f, 1f);
+        ws.background = new TextureRegionDrawable(new TextureRegion(panelBgTexture));
+
+        final Window w = new Window(recipe.displayName, ws);
+        w.setModal(false);
+        w.setMovable(false);
+        w.padTop(28).padLeft(10).padRight(10).padBottom(10);
+
+        Label.LabelStyle bodyStyle = new Label.LabelStyle(hubSmallFont, new Color(0.85f, 0.85f, 0.9f, 1f));
+        Label body = new Label(recipe.description, bodyStyle);
+        body.setWrap(true);
+        w.add(body).width(280).pad(6).row();
+
+        Label.LabelStyle metaStyle = new Label.LabelStyle(hubSmallFont, new Color(0.6f, 0.85f, 1f, 1f));
+        w.add(new Label("Hub Tier " + recipe.requiredHubTier + " required", metaStyle)).padBottom(8).row();
+
+        TextButton close = new TextButton("Close", makeButtonStyle());
+        close.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                closeRecipeInfoPopup();
+            }
+        });
+        w.add(close).width(90).height(32).padTop(4);
+
+        w.pack();
+        w.setPosition((stage.getWidth() - w.getWidth()) / 2f,
+                      (stage.getHeight() - w.getHeight()) / 2f);
+        stage.addActor(w);
+        activeInfoPopup = w;
+    }
+
+    private void closeRecipeInfoPopup() {
+        if (activeInfoPopup != null) {
+            activeInfoPopup.remove();
+            activeInfoPopup = null;
+        }
     }
 
     private TextButton.TextButtonStyle makeButtonStyle() {
@@ -519,6 +654,46 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         bankingPopupTimer = 2.5f;
     }
 
+    // ── Dev Toggle Button ────────────────────────────────────────────────
+
+    private void buildDevToggle() {
+        Table wrapper = new Table();
+        wrapper.setFillParent(true);
+        wrapper.top().right();
+        wrapper.setTouchable(Touchable.childrenOnly);
+
+        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
+        s.font = hubButtonFont; s.fontColor = Color.WHITE;
+        s.overFontColor = new Color(0.6f, 0.85f, 1f, 1f);
+        s.up = new TextureRegionDrawable(new TextureRegion(buttonUpTexture));
+        s.over = new TextureRegionDrawable(new TextureRegion(buttonOverTexture));
+        s.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
+
+        devToggleButton = new TextButton(devLabel(), s);
+        devToggleButton.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager gm = GameManager.getInstance();
+                boolean newState = !gm.isDevUnlimited();
+                gm.setDevUnlimited(newState);
+                if (!newState && player != null) {
+                    // Spec: turning dev OFF wipes any items the player was holding
+                    player.inventory.clear();
+                    player.machineInventory.clear();
+                    player.notifyObservers();
+                }
+                devToggleButton.setText(devLabel());
+                showBankingPopup(newState ? "DEV resources ON" : "DEV resources OFF — inventory cleared");
+            }
+        });
+
+        wrapper.add(devToggleButton).width(140).height(32).padTop(8).padRight(8);
+        stage.addActor(wrapper);
+    }
+
+    private String devLabel() {
+        return "DEV: " + (GameManager.getInstance().isDevUnlimited() ? "ON" : "OFF");
+    }
+
     public void updateHotbar(float delta) {
         if (player == null) return;
 
@@ -585,6 +760,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         hubPanelVisible = visible;
         hubPanel.setVisible(visible);
         if (visible) rebuildHubContent();
+        else closeRecipeInfoPopup();
     }
 
     public boolean isHubPanelVisible() { return hubPanelVisible; }
@@ -612,6 +788,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     }
 
     private String formatItemName(ItemType type) {
+        if (type == ItemType.RAW_COAL) return "Coal";
         return formatNameString(type.name());
     }
 
@@ -649,8 +826,8 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     @Override
     public void onVaultUpdated(Map<ItemType, Integer> vault) {
         currentVault.clear(); currentVault.putAll(vault); rebuildTable();
-        // Refresh manufacturing tab costs when vault changes
-        if (hubPanelVisible && activeTab == HubTab.MANUFACTURING) {
+        // Refresh manufacturing / launch tab costs when vault changes
+        if (hubPanelVisible && (activeTab == HubTab.MANUFACTURING || activeTab == HubTab.LAUNCH)) {
             rebuildHubContent();
         }
     }

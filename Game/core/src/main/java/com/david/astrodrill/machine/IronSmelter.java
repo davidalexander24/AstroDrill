@@ -10,7 +10,7 @@ import com.david.astrodrill.screen.PlayScreen;
 public class IronSmelter extends Machine {
     public IronSmelter(float x, float y, float w, float h) {
         this.x = x; this.y = y; this.width = w; this.height = h;
-        this.processDuration = 3f;
+        this.processDuration = 5f;
     }
 
     @Override public String getMachineType() { return "IronSmelter"; }
@@ -18,16 +18,18 @@ public class IronSmelter extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
-        if (userDisabled) { isPowered = false; return; }
+        if (userDisabled) { isPowered = false; wantsPower = false; return; }
+
+        GameManager gm = GameManager.getInstance();
+        boolean hasInput = gm.hasItems(ItemType.RAW_IRON, 1);
+        wantsPower = hasInput || processTimer > 0;
+
         isPowered = hasAdjacentPower(screen.getActiveMachines());
         if (!isPowered) return;
 
-        if (processTimer <= 0) {
-            GameManager gm = GameManager.getInstance();
-            if (gm.hasItems(ItemType.RAW_IRON, 1)) {
-                gm.consumeItems(ItemType.RAW_IRON, 1);
-                processTimer = processDuration;
-            }
+        if (processTimer <= 0 && hasInput) {
+            gm.consumeItems(ItemType.RAW_IRON, 1);
+            processTimer = processDuration;
         }
         if (processTimer > 0) {
             processTimer -= delta;

@@ -10,7 +10,7 @@ import com.david.astrodrill.screen.PlayScreen;
 public class HullPress extends Machine {
     public HullPress(float x, float y, float w, float h) {
         this.x = x; this.y = y; this.width = w; this.height = h;
-        this.processDuration = 5f;
+        this.processDuration = 8f;
     }
 
     @Override public String getMachineType() { return "HullPress"; }
@@ -18,17 +18,19 @@ public class HullPress extends Machine {
 
     @Override
     public void update(float delta, PlayScreen screen) {
-        if (userDisabled) { isPowered = false; return; }
+        if (userDisabled) { isPowered = false; wantsPower = false; return; }
+
+        GameManager gm = GameManager.getInstance();
+        boolean hasInput = gm.hasItems(ItemType.IRON_INGOT, 2) && gm.hasItems(ItemType.RAW_OBSIDIAN, 1);
+        wantsPower = hasInput || processTimer > 0;
+
         isPowered = hasAdjacentPower(screen.getActiveMachines());
         if (!isPowered) return;
 
-        if (processTimer <= 0) {
-            GameManager gm = GameManager.getInstance();
-            if (gm.hasItems(ItemType.IRON_INGOT, 2) && gm.hasItems(ItemType.RAW_OBSIDIAN, 1)) {
-                gm.consumeItems(ItemType.IRON_INGOT, 2);
-                gm.consumeItems(ItemType.RAW_OBSIDIAN, 1);
-                processTimer = processDuration;
-            }
+        if (processTimer <= 0 && hasInput) {
+            gm.consumeItems(ItemType.IRON_INGOT, 2);
+            gm.consumeItems(ItemType.RAW_OBSIDIAN, 1);
+            processTimer = processDuration;
         }
         if (processTimer > 0) {
             processTimer -= delta;
