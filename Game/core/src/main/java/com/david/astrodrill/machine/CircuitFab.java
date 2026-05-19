@@ -5,7 +5,7 @@ import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.screen.PlayScreen;
 
 /**
- * 1 SILICON_WAFER + 1 COPPER_WIRE → 1 CIRCUIT_BOARD (requires adjacent CoalGenerator).
+ * 1 SILICON_WAFER + 1 COPPER_WIRE + 1 GOLD_INGOT → 1 CIRCUIT_BOARD (requires adjacent CoalGenerator).
  */
 public class CircuitFab extends Machine {
     public CircuitFab(float x, float y, float w, float h) {
@@ -21,7 +21,9 @@ public class CircuitFab extends Machine {
         if (userDisabled) { isPowered = false; wantsPower = false; return; }
 
         GameManager gm = GameManager.getInstance();
-        boolean hasInput = gm.hasItems(ItemType.SILICON_WAFER, 1) && gm.hasItems(ItemType.COPPER_WIRE, 1);
+        boolean hasInput = gm.hasItems(ItemType.SILICON_WAFER, 1)
+                        && gm.hasItems(ItemType.COPPER_WIRE, 1)
+                        && gm.hasItems(ItemType.GOLD_INGOT, 1);
         wantsPower = hasInput || processTimer > 0;
 
         isPowered = hasAdjacentPower(screen.getActiveMachines());
@@ -30,6 +32,7 @@ public class CircuitFab extends Machine {
         if (processTimer <= 0 && hasInput) {
             gm.consumeItems(ItemType.SILICON_WAFER, 1);
             gm.consumeItems(ItemType.COPPER_WIRE, 1);
+            gm.consumeItems(ItemType.GOLD_INGOT, 1);
             processTimer = processDuration;
         }
         if (processTimer > 0) {
