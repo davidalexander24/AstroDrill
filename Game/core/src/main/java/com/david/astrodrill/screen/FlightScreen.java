@@ -242,8 +242,8 @@ public class FlightScreen implements Screen {
             bigFont.setColor(new Color(0.4f, 1f, 0.5f, 1f));
             bigFont.draw(batch, "ESCAPE SUCCESSFUL", w / 2f - 280, h / 2f + 20);
             hudFont.setColor(Color.WHITE);
-            bigFont.draw(batch, "Orbit Reached", w / 2f - 280, h / 2f + 20);
-            hudFont.draw(batch, "Press ENTER to return to main menu", w / 2f - 200, h / 2f - 30);
+            hudFont.draw(batch, "Orbit Reached", w / 2f - 90, h / 2f - 30);
+            hudFont.draw(batch, "Press ENTER to return to main menu", w / 2f - 200, h / 2f - 80);
         } else if (state == FlightState.CRASH) {
             bigFont.setColor(new Color(1f, 0.4f, 0.3f, 1f));
             bigFont.draw(batch, "CRASH - OUT OF FUEL", w / 2f - 280, h / 2f + 20);
