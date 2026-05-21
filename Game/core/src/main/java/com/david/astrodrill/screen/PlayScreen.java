@@ -7,6 +7,7 @@ import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.RandomXS128;
@@ -14,11 +15,14 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Pool;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.audio.Music;
 import com.david.astrodrill.entity.Block;
 import com.david.astrodrill.entity.Block.BlockType;
 import com.david.astrodrill.entity.Player;
 import com.david.astrodrill.item.ItemType;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.david.astrodrill.network.BackendClient;
 import com.david.astrodrill.network.BackendException;
 import com.david.astrodrill.network.SaveStateSerializer;
@@ -59,6 +63,7 @@ public class PlayScreen implements Screen {
     private BitmapFont machineFont;
     private Rectangle placementCheck = new Rectangle();
     private Sound mineSound;
+    private Music drillSound;
     private Sound placeSound;
 
     // Auto-banking: only bank once per zone entry
@@ -67,6 +72,8 @@ public class PlayScreen implements Screen {
     // Save status
     private int sessionMaxDepth = 0;
     private boolean savingInFlight = false;
+
+    private Texture bgTexture;
 
     private final Pool<Block> blockPool = new Pool<Block>() {
         @Override
@@ -103,6 +110,7 @@ public class PlayScreen implements Screen {
         camera = new OrthographicCamera();
         shapeRenderer = new ShapeRenderer();
         batch = new SpriteBatch();
+        GameManager.getInstance().ensureTexturesLoaded();
         hud = new Hud(batch);
 
         String pending = GameManager.getInstance().consumePendingSaveBlob();
@@ -111,7 +119,7 @@ public class PlayScreen implements Screen {
         long seed = (dto != null && dto.world != null) ? dto.world.seed : System.currentTimeMillis();
         generateWorld(seed);
 
-        landerHub = new LanderHub(49f, 1f, 3f, 3f);
+        landerHub = new LanderHub(47.5f, 1f, 6f, 3f);
 
         FreeTypeFontGenerator.FreeTypeFontParameter machineParam = new FreeTypeFontGenerator.FreeTypeFontParameter();
         machineParam.size = 12;
@@ -123,7 +131,11 @@ public class PlayScreen implements Screen {
         gen.dispose();
 
         mineSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Mine.wav"));
+        drillSound = Gdx.audio.newMusic(Gdx.files.internal("sounds/Drill.wav"));
         placeSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Place.wav"));
+
+        bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
+        bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
 
         player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
         player.addObserver(hud);
@@ -173,6 +185,8 @@ public class PlayScreen implements Screen {
                 BlockType type;
 
                 if (c >= HUB_COL_START && c <= HUB_COL_END && r <= HUB_FOUNDATION_DEPTH) {
+                    type = BlockType.BEDROCK;
+                } else if (r == ROWS - 1) {
                     type = BlockType.BEDROCK;
                 } else if (r == 0) {
                     type = BlockType.DIRT;
@@ -385,6 +399,7 @@ public class PlayScreen implements Screen {
                 for (Machine m : activeMachines) {
                     if (Math.abs(m.x - pendingRightClick.x) < 0.01f
                             && Math.abs(m.y - pendingRightClick.y) < 0.01f) {
+                        GameManager.getInstance().playMenuSound();
                         m.userDisabled = !m.userDisabled;
                         String name = formatMachineName(m.getMachineType());
                         hud.showBankingPopup(name + (m.userDisabled ? " OFF" : " ON"));
@@ -451,6 +466,10 @@ public class PlayScreen implements Screen {
                 Block.BlockType mined = mineBlockAt(tx, ty);
                 if (mined != null) {
                     mineSound.play(GameManager.getInstance().getSfxVolume());
+                    if (drillSound != null && !drillSound.isPlaying()) {
+                        drillSound.setVolume(GameManager.getInstance().getSfxVolume());
+                        drillSound.play();
+                    }
                     player.addBlockToInventory(mined);
                     // Scale cooldown inversely to speed so a wheel-upgraded player
                     // doesn't outrun their drill. 0.85 / speed keeps mining ~15% faster
@@ -510,68 +529,162 @@ public class PlayScreen implements Screen {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         // ── Rendering ────────────────────────────────────────────────────
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        GameManager gm = GameManager.getInstance();
 
+        // Frustum AABB — skip anything outside the visible camera bounds so we
+        // don't pay SpriteBatch / ShapeRenderer cost for the other ~29k blocks.
+        float halfViewW2 = camera.viewportWidth  * camera.zoom * 0.5f + BLOCK_SIZE;
+        float halfViewH2 = camera.viewportHeight * camera.zoom * 0.5f + BLOCK_SIZE;
+        float viewMinX = camera.position.x - halfViewW2;
+        float viewMaxX = camera.position.x + halfViewW2;
+        float viewMinY = camera.position.y - halfViewH2;
+        float viewMaxY = camera.position.y + halfViewH2;
+
+        float viewW = camera.viewportWidth * camera.zoom;
+        float viewH = camera.viewportHeight * camera.zoom;
+
+        // Render parallax background
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        batch.setColor(Color.WHITE);
+        int srcX = (int)(camera.position.x * 20f);
+        int srcY = (int)(-camera.position.y * 20f);
+        batch.draw(bgTexture, camera.position.x - viewW / 2f, camera.position.y - viewH / 2f, 
+                   viewW, viewH, srcX, srcY, (int)(viewW * 20f), (int)(viewH * 20f), false, false);
+        batch.end();
+
+        // Pass 1: textured blocks via SpriteBatch.
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        batch.setColor(Color.WHITE);
         for (Block block : activeBlocks) {
-            if (block.active) {
-                switch(block.type) {
-                    case DIRT:        shapeRenderer.setColor(0.54f, 0.27f, 0.07f, 1f); break;
-                    case STONE:       shapeRenderer.setColor(0.5f, 0.5f, 0.5f, 1f); break;
-                    case COPPER_ORE:  shapeRenderer.setColor(0.8f, 0.4f, 0.0f, 1f); break;
-                    case IRON_ORE:    shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); break;
-                    case COAL_ORE:    shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); break;
-                    case BASALT:      shapeRenderer.setColor(0.25f, 0.25f, 0.25f, 1f); break;
-                    case GOLD_ORE:    shapeRenderer.setColor(1f, 0.84f, 0f, 1f); break;
-                    case SILICON_ORE: shapeRenderer.setColor(0.6f, 0.8f, 0.9f, 1f); break;
-                    case URANIUM_ORE: shapeRenderer.setColor(0.2f, 1f, 0.2f, 1f); break;
-                    case OBSIDIAN:    shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 1f); break;
-                    case BEDROCK:     shapeRenderer.setColor(0.1f, 0.1f, 0.3f, 1f); break;
-                    default:          shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); break;
-                }
-                // Player-placed blocks get a slight tint (brighter) to distinguish them
-                if (block.isPlayerPlaced) {
-                    shapeRenderer.setColor(
-                        Math.min(1f, shapeRenderer.getColor().r + 0.15f),
-                        Math.min(1f, shapeRenderer.getColor().g + 0.15f),
-                        Math.min(1f, shapeRenderer.getColor().b + 0.15f),
-                        1f
-                    );
-                }
-                shapeRenderer.rect(block.x, block.y, block.width, block.height);
+            if (!block.active) continue;
+            if (block.x + block.width  < viewMinX || block.x > viewMaxX) continue;
+            if (block.y + block.height < viewMinY || block.y > viewMaxY) continue;
+            TextureRegion region = gm.getBlockTex(block.type);
+            if (region == null) continue;
+            batch.draw(region, block.x, block.y, block.width, block.height);
+        }
+        // Additive overlay so player-placed blocks read brighter than world-generated ones.
+        batch.flush();
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        batch.setColor(0.18f, 0.18f, 0.18f, 1f);
+        for (Block block : activeBlocks) {
+            if (!block.active || !block.isPlayerPlaced) continue;
+            if (block.x + block.width  < viewMinX || block.x > viewMaxX) continue;
+            if (block.y + block.height < viewMinY || block.y > viewMaxY) continue;
+            TextureRegion region = gm.getBlockTex(block.type);
+            if (region == null) continue;
+            batch.draw(region, block.x, block.y, block.width, block.height);
+        }
+        batch.flush();
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        batch.setColor(Color.WHITE);
+
+        // LanderHub sprite (falls back to gray rect in the ShapeRenderer pass if absent).
+        TextureRegion hubRegion = gm.getHubTex();
+        if (hubRegion != null) {
+            // Offset Y slightly because the 192x96 texture has 10px of transparent padding at the bottom,
+            // which causes it to float above the ground. (10/96 * height)
+            float renderY = landerHub.y - (10f / 96f) * landerHub.height;
+            batch.draw(hubRegion, landerHub.x, renderY, landerHub.width, landerHub.height);
+        }
+
+        // Machine sprites (state border still drawn in the Line pass below).
+        // Pick on or off variant based on Machine.isRunning(); fall back to on if off missing.
+        for (Machine machine : activeMachines) {
+            if (machine.x + machine.width  < viewMinX || machine.x > viewMaxX) continue;
+            if (machine.y + machine.height < viewMinY || machine.y > viewMaxY) continue;
+            TextureRegion mTex;
+            if (machine.isRunning()) {
+                mTex = gm.getMachineTex(machine);
+            } else {
+                mTex = gm.getMachineOffTex(machine);
+                if (mTex == null) mTex = gm.getMachineTex(machine);
+            }
+            if (mTex != null) {
+                batch.draw(mTex, machine.x, machine.y, machine.width, machine.height);
             }
         }
 
-        // Render machine FILLS (still inside the Filled pass)
+        // Player rover sprite (flipped for left-facing) drawn before the ShapeRenderer
+        // pass so machine borders and hub render on top if they overlap.
+        TextureRegion playerRegion = gm.getPlayerFrame(player.facingLeft, player.stateTime, player.isMoving);
+        if (playerRegion != null) {
+            float scale = 1.8f;
+            float renderW = player.width * scale;
+            float renderH = player.height * scale;
+            float renderX = player.x - (renderW - player.width) / 2f;
+            // The player_anim.png has ~10px of transparent padding at the bottom of the 128px sprite.
+            float renderY = player.y - (10f / 128f) * renderH;
+            batch.draw(playerRegion, renderX, renderY, renderW, renderH);
+        }
+        batch.end();
+
+        // Pass 2: ShapeRenderer for everything still untextured (machines, hub,
+        // fallback for any block whose PNG hasn't been generated yet).
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        for (Block block : activeBlocks) {
+            if (!block.active) continue;
+            if (gm.getBlockTex(block.type) != null) continue;
+            if (block.x + block.width  < viewMinX || block.x > viewMaxX) continue;
+            if (block.y + block.height < viewMinY || block.y > viewMaxY) continue;
+            switch(block.type) {
+                case DIRT:        shapeRenderer.setColor(0.54f, 0.27f, 0.07f, 1f); break;
+                case STONE:       shapeRenderer.setColor(0.5f, 0.5f, 0.5f, 1f); break;
+                case COPPER_ORE:  shapeRenderer.setColor(0.8f, 0.4f, 0.0f, 1f); break;
+                case IRON_ORE:    shapeRenderer.setColor(0.75f, 0.75f, 0.75f, 1f); break;
+                case COAL_ORE:    shapeRenderer.setColor(0.2f, 0.2f, 0.2f, 1f); break;
+                case BASALT:      shapeRenderer.setColor(0.25f, 0.25f, 0.25f, 1f); break;
+                case GOLD_ORE:    shapeRenderer.setColor(1f, 0.84f, 0f, 1f); break;
+                case SILICON_ORE: shapeRenderer.setColor(0.6f, 0.8f, 0.9f, 1f); break;
+                case URANIUM_ORE: shapeRenderer.setColor(0.2f, 1f, 0.2f, 1f); break;
+                case OBSIDIAN:    shapeRenderer.setColor(0.05f, 0.05f, 0.08f, 1f); break;
+                case BEDROCK:     shapeRenderer.setColor(0.1f, 0.1f, 0.3f, 1f); break;
+                default:          shapeRenderer.setColor(0.6f, 0.6f, 0.6f, 1f); break;
+            }
+            if (block.isPlayerPlaced) {
+                shapeRenderer.setColor(
+                    Math.min(1f, shapeRenderer.getColor().r + 0.15f),
+                    Math.min(1f, shapeRenderer.getColor().g + 0.15f),
+                    Math.min(1f, shapeRenderer.getColor().b + 0.15f),
+                    1f
+                );
+            }
+            shapeRenderer.rect(block.x, block.y, block.width, block.height);
+        }
+
+        // Render machine FILLS only when no sprite is available (fallback).
         for (Machine machine : activeMachines) {
+            if (gm.getMachineTex(machine) != null) continue;
+            if (machine.x + machine.width  < viewMinX || machine.x > viewMaxX) continue;
+            if (machine.y + machine.height < viewMinY || machine.y > viewMaxY) continue;
             shapeRenderer.setColor(machineFillColor(machine));
             shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
         }
 
-        // Render LanderHub
-        shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
-        shapeRenderer.rect(landerHub.x, landerHub.y, landerHub.width, landerHub.height);
-
-        // Render Player
-        shapeRenderer.setColor(0f, 0.5f, 1f, 1f);
-        shapeRenderer.rect(player.x, player.y, player.width, player.height);
-
-        shapeRenderer.end();
-
-        // Separate pass for machine BORDERS
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        for (Machine machine : activeMachines) {
-            if (machine.userDisabled) shapeRenderer.setColor(1f, 0.2f, 0.2f, 1f);
-            else if (machine.isPowered) shapeRenderer.setColor(Color.WHITE);
-            else shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f);
-            shapeRenderer.rect(machine.x, machine.y, machine.width, machine.height);
+        // Render LanderHub fallback (gray rect) only if no sprite was drawn above.
+        if (hubRegion == null) {
+            shapeRenderer.setColor(0.4f, 0.4f, 0.4f, 1f);
+            shapeRenderer.rect(landerHub.x, landerHub.y, landerHub.width, landerHub.height);
         }
+
+        // Fallback player rect (only if the rover sprite is missing).
+        if (playerRegion == null) {
+            shapeRenderer.setColor(0f, 0.5f, 1f, 1f);
+            shapeRenderer.rect(player.x, player.y, player.width, player.height);
+        }
+
         shapeRenderer.end();
 
-        // Render machine symbols using SpriteBatch
+
+        // Render machine symbols using SpriteBatch — only for machines without a sprite.
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         machineFont.getData().setScale(0.02f);
         for (Machine machine : activeMachines) {
+            if (gm.getMachineTex(machine) != null) continue;
             String symbol = machine.getSymbol();
             if (symbol == null) symbol = "?";
             machineFont.setColor(machine.isPowered ? Color.WHITE : Color.GRAY);
@@ -609,7 +722,9 @@ public class PlayScreen implements Screen {
     public void dispose() {
         if (machineFont != null) machineFont.dispose();
         if (mineSound != null) mineSound.dispose();
+        if (drillSound != null) drillSound.dispose();
         if (placeSound != null) placeSound.dispose();
+        if (bgTexture != null) bgTexture.dispose();
         shapeRenderer.dispose();
         batch.dispose();
         hud.dispose();
@@ -697,6 +812,12 @@ public class PlayScreen implements Screen {
             landerHub.width = dto.hub.width;
             landerHub.height = dto.hub.height;
             landerHub.tier = Math.max(1, dto.hub.tier);
+            
+            // Migrate old saves where the hub was 3x3 to the new 6x3 dimensions
+            if (landerHub.width == 3f) {
+                landerHub.width = 6f;
+                landerHub.x = 47.5f;
+            }
         }
 
         // World — apply mined deletions and placed additions on top of the regenerated world
@@ -852,6 +973,10 @@ public class PlayScreen implements Screen {
                 activeBlocks.removeIndex(i);
                 blockPool.free(b);
                 mineSound.play(GameManager.getInstance().getSfxVolume());
+                if (drillSound != null && !drillSound.isPlaying()) {
+                    drillSound.setVolume(GameManager.getInstance().getSfxVolume());
+                    drillSound.play();
+                }
                 return;
             }
         }
@@ -867,6 +992,10 @@ public class PlayScreen implements Screen {
                 }
                 it.remove();
                 mineSound.play(GameManager.getInstance().getSfxVolume());
+                if (drillSound != null && !drillSound.isPlaying()) {
+                    drillSound.setVolume(GameManager.getInstance().getSfxVolume());
+                    drillSound.play();
+                }
                 return;
             }
         }

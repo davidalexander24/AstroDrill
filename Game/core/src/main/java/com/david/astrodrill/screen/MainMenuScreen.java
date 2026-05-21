@@ -59,6 +59,7 @@ public class MainMenuScreen implements Screen {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 if (continueButton.isDisabled() || loadedSaveBlob == null) return;
+                GameManager.getInstance().playMenuSound();
                 GameManager.getInstance().setPendingSaveBlob(loadedSaveBlob);
                 GameManager.getInstance().changeScreen(ScreenType.PLAY);
             }
@@ -66,6 +67,7 @@ public class MainMenuScreen implements Screen {
         newGame.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 GameManager.getInstance().setPendingSaveBlob(null);
                 GameManager.getInstance().changeScreen(ScreenType.PLAY);
             }
@@ -73,12 +75,14 @@ public class MainMenuScreen implements Screen {
         leaderboard.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 GameManager.getInstance().changeScreen(ScreenType.LEADERBOARD);
             }
         });
         logout.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 GameManager.getInstance().clearCurrentUser();
                 GameManager.getInstance().changeScreen(ScreenType.LOGIN);
             }
@@ -86,6 +90,7 @@ public class MainMenuScreen implements Screen {
         quit.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 Gdx.app.exit();
             }
         });

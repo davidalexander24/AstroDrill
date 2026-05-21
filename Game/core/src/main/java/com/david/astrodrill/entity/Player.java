@@ -19,7 +19,11 @@ public class Player {
     public float height;
     public float velocityX;
     public float velocityY;
+    /** True if the player rover is currently oriented facing left (used to flip the sprite). */
+    public boolean facingLeft = false;
     public float speed;
+    public float stateTime = 0f;
+    public boolean isMoving = false;
     public Rectangle bounds;
     public Map<Block.BlockType, Integer> inventory;
     private List<InventoryObserver> observers;
@@ -392,10 +396,12 @@ public class Player {
         if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
             velocityX = -speed;
             moving = true;
+            facingLeft = true;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
             velocityX = speed;
             moving = true;
+            facingLeft = false;
         }
 
         // Battery drain
@@ -408,6 +414,13 @@ public class Player {
 
         if (currentBattery < 0) currentBattery = 0;
         if (currentBattery <= 0) respawn();
+
+        isMoving = jetting || moving;
+        if (isMoving) {
+            stateTime += delta;
+        } else {
+            stateTime = 0f;
+        }
     }
 
     public void respawn() {

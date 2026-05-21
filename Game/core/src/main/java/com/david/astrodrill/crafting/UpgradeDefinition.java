@@ -48,7 +48,7 @@ public class UpgradeDefinition {
             mapOf(ItemType.IRON_GEAR, 10),
             mapOf(ItemType.IRON_GEAR, 15, ItemType.COPPER_WIRE, 10)),
 
-        new UpgradeDefinition("WHEEL", "Wheel Speed",
+        new UpgradeDefinition("WHEEL", "Roller Skates",
             mapOf(ItemType.IRON_INGOT, 6, ItemType.COPPER_INGOT, 4),
             mapOf(ItemType.IRON_GEAR, 6, ItemType.COPPER_WIRE, 6)),
 

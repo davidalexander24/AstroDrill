@@ -71,6 +71,12 @@ public class CoalGenerator extends Machine {
         return burnTimer > 0 || GameManager.getInstance().hasItems(ItemType.RAW_COAL, 1);
     }
 
+    /** CoalGenerator's isPowered already means "actively burning right now", so processTimer is irrelevant here. */
+    @Override
+    public boolean isRunning() {
+        return isPowered && !userDisabled;
+    }
+
     @Override
     public void process() { /* No output — it just provides power */ }
 }

@@ -79,11 +79,11 @@ public class LoginScreen implements Screen {
 
         loginButton.addListener(new ClickListener() {
             @Override
-            public void clicked(InputEvent event, float x, float y) { attemptLogin(); }
+            public void clicked(InputEvent event, float x, float y) { GameManager.getInstance().playMenuSound(); attemptLogin(); }
         });
         registerButton.addListener(new ClickListener() {
             @Override
-            public void clicked(InputEvent event, float x, float y) { attemptRegister(); }
+            public void clicked(InputEvent event, float x, float y) { GameManager.getInstance().playMenuSound(); attemptRegister(); }
         });
 
         panel.add(new Label("Username", skin.labelStyle)).row();

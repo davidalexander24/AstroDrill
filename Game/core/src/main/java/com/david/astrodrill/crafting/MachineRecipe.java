@@ -16,15 +16,23 @@ public class MachineRecipe {
     public final Map<ItemType, Integer> cost;
     public final int requiredHubTier;
     public final String description;
+    public final Map<ItemType, Integer> productionInputs;
+    public final Map<ItemType, Integer> productionOutputs;
+    public final float productionTime;
 
     private MachineRecipe(String displayName, String machineFactoryKey, ItemType outputItemType,
-                          Map<ItemType, Integer> cost, int requiredHubTier, String description) {
+                          Map<ItemType, Integer> cost, int requiredHubTier, String description,
+                          Map<ItemType, Integer> productionInputs, Map<ItemType, Integer> productionOutputs,
+                          float productionTime) {
         this.displayName = displayName;
         this.machineFactoryKey = machineFactoryKey;
         this.outputItemType = outputItemType;
         this.cost = Collections.unmodifiableMap(cost);
         this.requiredHubTier = requiredHubTier;
         this.description = description;
+        this.productionInputs = productionInputs != null ? Collections.unmodifiableMap(productionInputs) : null;
+        this.productionOutputs = productionOutputs != null ? Collections.unmodifiableMap(productionOutputs) : null;
+        this.productionTime = productionTime;
     }
 
     private static final MachineRecipe[] ALL_RECIPES = buildRecipes();
@@ -37,18 +45,17 @@ public class MachineRecipe {
                 mapOf(ItemType.STONE, 20, ItemType.RAW_IRON, 10), 1,
                 "Smelts raw iron ore into iron ingots.\n"
                 + "\n"
-                + "1 Raw Iron -> 1 Iron Ingot  (5s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.RAW_IRON, 1), mapOf(ItemType.IRON_INGOT, 1), 5f),
+                
             new MachineRecipe("Copper Smelter", "CopperSmelter", ItemType.COPPER_SMELTER,
                 mapOf(ItemType.STONE, 20, ItemType.RAW_COPPER, 10), 1,
                 "Smelts raw copper ore into copper ingots.\n"
                 + "\n"
-                + "1 Raw Copper -> 1 Copper Ingot  (5s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.RAW_COPPER, 1), mapOf(ItemType.COPPER_INGOT, 1), 5f),
 
             // ── Stage 2: Power (requires smelted ingots) ───────────────
             new MachineRecipe("Coal Generator", "CoalGenerator", ItemType.COAL_GENERATOR,
@@ -58,25 +65,25 @@ public class MachineRecipe {
                 + "Burns 1 Raw Coal every 15s of demand-weighted time.\n"
                 + "Idle when no neighbor needs power.\n"
                 + "\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                null, null, 0f),
 
             // ── Stage 3: Assemblers (sustained smelting) ───────────────
             new MachineRecipe("Gear Assembler", "GearAssembler", ItemType.GEAR_ASSEMBLER,
                 mapOf(ItemType.IRON_INGOT, 15, ItemType.COPPER_INGOT, 6), 1,
                 "Stamps iron ingots into mechanical gears.\n"
                 + "\n"
-                + "2 Iron Ingots -> 1 Iron Gear  (6s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.IRON_INGOT, 2), mapOf(ItemType.IRON_GEAR, 1), 6f),
+                
             new MachineRecipe("Wire Assembler", "WireAssembler", ItemType.WIRE_ASSEMBLER,
                 mapOf(ItemType.IRON_INGOT, 12, ItemType.COPPER_INGOT, 10), 1,
                 "Draws copper ingots into wire.\n"
                 + "\n"
-                + "1 Copper Ingot -> 2 Copper Wire  (6s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.COPPER_INGOT, 1), mapOf(ItemType.COPPER_WIRE, 2), 6f),
 
             // ── Stage 4: Automation Reward ─────────────────────────────
             new MachineRecipe("Auto Miner", "AutoMiner", ItemType.AUTO_MINER,
@@ -85,53 +92,51 @@ public class MachineRecipe {
                 + "and deposits 2 raw resources to the vault.\n"
                 + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                null, null, 15f),
 
             // ── Stage 5: Mid-game refining (Hub Tier 1+) ───────────────
             new MachineRecipe("Gold Smelter", "GoldSmelter", ItemType.GOLD_SMELTER,
                 mapOf(ItemType.STONE, 30, ItemType.IRON_INGOT, 8), 1,
                 "Smelts raw gold from the Mantle into ingots.\n"
                 + "\n"
-                + "1 Raw Gold -> 1 Gold Ingot  (8s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.RAW_GOLD, 1), mapOf(ItemType.GOLD_INGOT, 1), 8f),
 
             // ── Stage 6: Electronics (Hub Tier 2) ──────────────────────
             new MachineRecipe("Refinery", "Refinery", ItemType.REFINERY,
                 mapOf(ItemType.IRON_INGOT, 15, ItemType.COPPER_INGOT, 6), 2,
                 "Refines raw silicon into silicon wafers.\n"
                 + "\n"
-                + "1 Raw Silicon -> 1 Silicon Wafer  (7s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.RAW_SILICON, 1), mapOf(ItemType.SILICON_WAFER, 1), 7f),
+                
             new MachineRecipe("Circuit Fab", "CircuitFab", ItemType.CIRCUIT_FAB,
                 mapOf(ItemType.IRON_GEAR, 6, ItemType.COPPER_WIRE, 10), 2,
                 "Fabricates circuit boards from wafers, wire, and gold contacts.\n"
                 + "\n"
-                + "1 Wafer + 1 Wire + 1 Gold Ingot -> 1 Circuit Board (8s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.SILICON_WAFER, 1, ItemType.COPPER_WIRE, 1, ItemType.GOLD_INGOT, 1), mapOf(ItemType.CIRCUIT_BOARD, 1), 8f),
 
             // ── Stage 7: Rocket components (Hub Tier 3) ────────────────
             new MachineRecipe("Fuel Mixer", "FuelMixer", ItemType.FUEL_MIXER,
                 mapOf(ItemType.IRON_INGOT, 25, ItemType.COPPER_WIRE, 12), 3,
                 "Mixes uranium and coal into rocket fuel.\n"
                 + "\n"
-                + "1 Raw Uranium + 1 Raw Coal -> 1 Rocket Fuel  (10s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.RAW_URANIUM, 1, ItemType.RAW_COAL, 1), mapOf(ItemType.ROCKET_FUEL, 1), 10f),
+                
             new MachineRecipe("Hull Press", "HullPress", ItemType.HULL_PRESS,
                 mapOf(ItemType.IRON_INGOT, 30, ItemType.IRON_GEAR, 10, ItemType.GOLD_INGOT, 5), 3,
                 "Presses iron and obsidian into hull plating.\n"
                 + "\n"
-                + "2 Iron Ingots + 1 Raw Obsidian -> 1 Hull Plating  (8s)\n"
-                + "\n"
                 + "Requires adjacent Coal Generator power.\n"
-                + "Right click to toggle OFF/ON."),
+                + "Right click to toggle OFF/ON.",
+                mapOf(ItemType.IRON_INGOT, 2, ItemType.RAW_OBSIDIAN, 1), mapOf(ItemType.HULL_PLATING, 1), 8f),
         };
     }
 

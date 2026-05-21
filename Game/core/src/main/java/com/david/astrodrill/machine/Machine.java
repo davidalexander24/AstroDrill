@@ -29,6 +29,11 @@ public abstract class Machine {
     public abstract void update(float delta, PlayScreen screen);
     public abstract void process();
 
+    /** True when this machine is actively working this frame. Drives the on/off sprite swap. */
+    public boolean isRunning() {
+        return isPowered && !userDisabled && processTimer > 0f;
+    }
+
     /**
      * Checks cardinal adjacency (Up, Down, Left, Right) on the 1x1 grid.
      * Returns true if any active CoalGenerator occupies one of the 4 cardinal neighbors.

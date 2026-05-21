@@ -11,8 +11,10 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
@@ -85,6 +87,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private Table hotbarWrapper, hotbarTable;
     private Label hotbarItemNameLabel;
     private final Label[] slotLabels = new Label[Player.HOTBAR_SLOTS];
+    private final Image[] slotIcons = new Image[Player.HOTBAR_SLOTS];
     private final Label[] slotNumberLabels = new Label[Player.HOTBAR_SLOTS];
     private final Table[] slotCells = new Table[Player.HOTBAR_SLOTS];
     private Texture slotBgTexture, slotActiveBgTexture;
@@ -131,25 +134,45 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private void rebuildTable() {
         table.clear();
         table.top().left();
-        table.add(batteryLabel).pad(10).row();
-        table.add(batteryWarningLabel).padLeft(10).padBottom(5).row();
+        table.add(batteryLabel).pad(10).left().row();
+        table.add(batteryWarningLabel).padLeft(10).padBottom(5).left().row();
 
         boolean hasInv = false;
         for (Integer c : currentInventory.values()) if (c > 0) { hasInv = true; break; }
         if (hasInv) {
-            table.add(new Label("--- Inventory ---", labelStyle)).padLeft(10).padBottom(5).row();
+            table.add(new Label("--- Inventory ---", labelStyle)).padLeft(10).padBottom(5).left().row();
             for (Block.BlockType t : INVENTORY_ORDER) {
                 int c = currentInventory.getOrDefault(t, 0);
-                if (c > 0) table.add(new Label(formatBlockName(t) + ": " + c, labelStyle)).padLeft(10).padBottom(5).row();
+                if (c > 0) {
+                    Table row = new Table();
+                    TextureRegion tex = GameManager.getInstance().getBlockTex(t);
+                    if (tex != null) {
+                        Image img = new Image(tex);
+                        img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                        row.add(img).size(20, 20).padRight(6);
+                    }
+                    row.add(new Label(formatBlockName(t) + ": " + c, labelStyle));
+                    table.add(row).padLeft(10).padBottom(5).left().row();
+                }
             }
         }
         boolean hasVault = false;
         for (Integer c : currentVault.values()) if (c > 0) { hasVault = true; break; }
         if (hasVault) {
-            table.add(new Label("--- Vault ---", labelStyle)).padLeft(10).padBottom(5).row();
+            table.add(new Label("--- Vault ---", labelStyle)).padLeft(10).padBottom(5).left().row();
             for (ItemType t : VAULT_ORDER) {
                 int c = currentVault.getOrDefault(t, 0);
-                if (c > 0) table.add(new Label(formatItemName(t) + ": " + c, labelStyle)).padLeft(10).padBottom(5).row();
+                if (c > 0) {
+                    Table row = new Table();
+                    TextureRegion tex = GameManager.getInstance().getItemTex(t);
+                    if (tex != null) {
+                        Image img = new Image(tex);
+                        img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                        row.add(img).size(20, 20).padRight(6);
+                    }
+                    row.add(new Label(formatItemName(t) + ": " + c, labelStyle));
+                    table.add(row).padLeft(10).padBottom(5).left().row();
+                }
             }
         }
     }
@@ -208,6 +231,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
 
         upgradesTab.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 closeRecipeInfoPopup();
                 activeTab = HubTab.UPGRADES;
                 rebuildHubContent();
@@ -215,6 +239,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         });
         mfgTab.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 closeRecipeInfoPopup();
                 activeTab = HubTab.MANUFACTURING;
                 rebuildHubContent();
@@ -222,6 +247,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         });
         launchTab.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 closeRecipeInfoPopup();
                 activeTab = HubTab.LAUNCH;
                 rebuildHubContent();
@@ -292,23 +318,31 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             }
 
             boolean canAfford = true;
-            StringBuilder costText = new StringBuilder();
             for (Map.Entry<ItemType, Integer> entry : cost.entrySet()) {
+                Table matRow = new Table();
+                matRow.left();
                 int have = gm.getItemCount(entry.getKey());
                 int need = entry.getValue();
                 if (have < need) canAfford = false;
-                if (costText.length() > 0) costText.append("  ");
-                costText.append(formatItemName(entry.getKey())).append(": ").append(have).append("/").append(need);
-            }
 
-            Label costLabel = new Label(costText.toString(), canAfford ? costOkStyle : costBadStyle);
-            costLabel.setWrap(true);
-            hubContentArea.add(costLabel).fillX().width(260).padLeft(8).row();
+                TextureRegion tex = gm.getItemTex(entry.getKey());
+                if (tex != null) {
+                    Image img = new Image(tex);
+                    img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                    matRow.add(img).size(16, 16).padRight(4);
+                }
+                String matName = formatItemName(entry.getKey());
+                Label costLabel = new Label(matName + " " + have + "/" + need, have >= need ? costOkStyle : costBadStyle);
+                matRow.add(costLabel).padRight(12);
+                hubContentArea.add(matRow).fillX().padLeft(8).padBottom(2).row();
+            }
+            hubContentArea.add(new Table()).padBottom(2).row();
 
             if (canAfford) {
                 TextButton btn = new TextButton("Upgrade", tbs);
                 btn.addListener(new ClickListener() {
                     @Override public void clicked(InputEvent e, float x, float y) {
+                        GameManager.getInstance().playMenuSound();
                         applyUpgrade(d);
                     }
                 });
@@ -387,34 +421,48 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             // Tier gate
             if (recipe.requiredHubTier > hubTier) {
                 Table lockedRow = new Table();
+                lockedRow.center();
                 lockedRow.add(new Label(recipe.displayName + " [Tier " + recipe.requiredHubTier + "]", lockedStyle))
-                    .expandX().left();
+                    .padRight(8);
                 lockedRow.add(makeInfoButton(rForInfo)).width(28).height(24).padRight(2);
-                hubContentArea.add(lockedRow).fillX().padBottom(6).row();
+                hubContentArea.add(lockedRow).center().padBottom(6).row();
                 continue;
-            }
-
-            // Check affordability
-            boolean canAfford = true;
-            StringBuilder costText = new StringBuilder();
-            for (Map.Entry<ItemType, Integer> entry : recipe.cost.entrySet()) {
-                int have = gm.getItemCount(entry.getKey());
-                int need = entry.getValue();
-                if (have < need) canAfford = false;
-                if (costText.length() > 0) costText.append("  ");
-                costText.append(formatItemName(entry.getKey())).append(": ").append(have).append("/").append(need);
             }
 
             // Machine name + info button
             Table nameRow = new Table();
-            nameRow.add(new Label(recipe.displayName, nameStyle)).expandX().left().padTop(4);
-            nameRow.add(makeInfoButton(rForInfo)).width(28).height(24).padTop(4).padRight(2);
-            hubContentArea.add(nameRow).fillX().row();
+            nameRow.center();
+            TextureRegion outTex = gm.getItemTex(recipe.outputItemType);
+            if (outTex != null) {
+                Image outImg = new Image(outTex);
+                outImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                nameRow.add(outImg).size(40, 40).padRight(8).padTop(4);
+            }
+            nameRow.add(new Label(recipe.displayName, nameStyle)).padTop(4);
+            nameRow.add(makeInfoButton(rForInfo)).width(28).height(24).padTop(4).padLeft(8);
+            hubContentArea.add(nameRow).center().row();
 
-            // Cost line
-            Label costLabel = new Label(costText.toString(), canAfford ? costOkStyle : costBadStyle);
-            costLabel.setWrap(true);
-            hubContentArea.add(costLabel).fillX().width(260).padLeft(8).row();
+            // Check affordability and build cost row
+            boolean canAfford = true;
+            for (Map.Entry<ItemType, Integer> entry : recipe.cost.entrySet()) {
+                Table matRow = new Table();
+                matRow.center();
+                int have = gm.getItemCount(entry.getKey());
+                int need = entry.getValue();
+                if (have < need) canAfford = false;
+
+                TextureRegion tex = gm.getItemTex(entry.getKey());
+                if (tex != null) {
+                    Image img = new Image(tex);
+                    img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                    matRow.add(img).size(16, 16).padRight(4);
+                }
+                String matName = formatItemName(entry.getKey());
+                Label costLabel = new Label(matName + " " + have + "/" + need, have >= need ? costOkStyle : costBadStyle);
+                matRow.add(costLabel).padRight(12);
+                hubContentArea.add(matRow).center().padBottom(2).row();
+            }
+            hubContentArea.add(new Table()).padBottom(2).row();
 
             // Craft button
             if (canAfford) {
@@ -422,6 +470,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
                 final MachineRecipe r = recipe;
                 craftBtn.addListener(new ClickListener() {
                     @Override public void clicked(InputEvent e, float x, float y) {
+                        GameManager.getInstance().playMenuSound();
                         craftMachine(r);
                     }
                 });
@@ -470,9 +519,9 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         hubContentArea.add(new Label("ROCKET LAUNCH", titleStyle)).fillX().padTop(4).padBottom(8).row();
         hubContentArea.add(new Label("Required Cargo:", hintStyle)).fillX().padBottom(4).row();
 
-        addRequirementRow("Rocket Fuel",   haveFuel,  needFuel,  okStyle, badStyle);
-        addRequirementRow("Hull Plating",  havePlate, needPlate, okStyle, badStyle);
-        addRequirementRow("Circuit Board", haveChip,  needChip,  okStyle, badStyle);
+        addRequirementRow(ItemType.ROCKET_FUEL,   haveFuel,  needFuel,  okStyle, badStyle);
+        addRequirementRow(ItemType.HULL_PLATING,  havePlate, needPlate, okStyle, badStyle);
+        addRequirementRow(ItemType.CIRCUIT_BOARD, haveChip,  needChip,  okStyle, badStyle);
 
         boolean ready = haveFuel >= needFuel && havePlate >= needPlate && haveChip >= needChip;
 
@@ -480,6 +529,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             TextButton launchBtn = new TextButton("LAUNCH", makeButtonStyle());
             launchBtn.addListener(new ClickListener() {
                 @Override public void clicked(InputEvent e, float x, float y) {
+                    GameManager.getInstance().playMenuSound();
                     GameManager.getInstance().changeScreen(GameManager.ScreenType.FLIGHT);
                 }
             });
@@ -494,18 +544,32 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         }
     }
 
-    private void addRequirementRow(String name, int have, int need, Label.LabelStyle okStyle, Label.LabelStyle badStyle) {
+    private void addRequirementRow(ItemType type, int have, int need, Label.LabelStyle okStyle, Label.LabelStyle badStyle) {
         boolean met = have >= need;
         String mark = met ? "[OK]" : "[ ]";
-        Label row = new Label(mark + "  " + name + ":  " + have + " / " + need,
-                              met ? okStyle : badStyle);
-        hubContentArea.add(row).fillX().padLeft(8).padBottom(4).row();
+        
+        Table rowTable = new Table();
+        rowTable.left();
+        rowTable.add(new Label(mark + "  ", met ? okStyle : badStyle));
+        
+        TextureRegion tex = GameManager.getInstance().getItemTex(type);
+        if (tex != null) {
+            Image img = new Image(tex);
+            img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            rowTable.add(img).size(16, 16).padRight(4);
+        }
+        
+        String name = formatItemName(type);
+        rowTable.add(new Label(name + ":  " + have + " / " + need, met ? okStyle : badStyle));
+        
+        hubContentArea.add(rowTable).fillX().padLeft(8).padBottom(4).row();
     }
 
     private TextButton makeInfoButton(final MachineRecipe recipe) {
         TextButton btn = new TextButton("?", makeButtonStyle());
         btn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 showRecipeInfoPopup(recipe);
             }
         });
@@ -524,18 +588,88 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         w.setModal(false);
         w.setMovable(false);
         w.padTop(28).padLeft(10).padRight(10).padBottom(10);
+        
+        TextureRegion outTex = GameManager.getInstance().getItemTex(recipe.outputItemType);
+        if (outTex != null) {
+            Image outImg = new Image(outTex);
+            outImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            w.add(outImg).size(64, 64).padBottom(8).row();
+        }
 
         Label.LabelStyle bodyStyle = new Label.LabelStyle(hubSmallFont, new Color(0.85f, 0.85f, 0.9f, 1f));
         Label body = new Label(recipe.description, bodyStyle);
         body.setWrap(true);
         w.add(body).width(280).pad(6).row();
 
+        if (recipe.productionInputs != null || recipe.productionOutputs != null) {
+            Table prodRow = new Table();
+            prodRow.setBackground(new TextureRegionDrawable(new TextureRegion(createSolidTexture(0.05f, 0.05f, 0.1f, 0.6f))));
+            prodRow.pad(6);
+            
+            // Inputs
+            if (recipe.productionInputs != null) {
+                for (Map.Entry<ItemType, Integer> entry : recipe.productionInputs.entrySet()) {
+                    TextureRegion tex = GameManager.getInstance().getItemTex(entry.getKey());
+                    if (tex != null) {
+                        Image img = new Image(tex);
+                        img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                        prodRow.add(img).size(20, 20).padRight(2);
+                    }
+                    prodRow.add(new Label(entry.getValue() + " " + formatItemName(entry.getKey()), bodyStyle)).padRight(6);
+                }
+            }
+            
+            // Arrow
+            Label.LabelStyle arrowStyle = new Label.LabelStyle(hubButtonFont, new Color(0.5f, 0.8f, 1f, 1f));
+            prodRow.add(new Label("-> ", arrowStyle)).padRight(6);
+            
+            // Outputs
+            if (recipe.productionOutputs != null) {
+                for (Map.Entry<ItemType, Integer> entry : recipe.productionOutputs.entrySet()) {
+                    TextureRegion tex = GameManager.getInstance().getItemTex(entry.getKey());
+                    if (tex != null) {
+                        Image img = new Image(tex);
+                        img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                        prodRow.add(img).size(24, 24).padRight(2);
+                    }
+                    Label.LabelStyle outStyle = new Label.LabelStyle(hubButtonFont, new Color(1f, 0.9f, 0.4f, 1f));
+                    prodRow.add(new Label(entry.getValue() + " " + formatItemName(entry.getKey()), outStyle)).padRight(6);
+                }
+            }
+            
+            // Time
+            if (recipe.productionTime > 0) {
+                Label.LabelStyle timeStyle = new Label.LabelStyle(hubSmallFont, new Color(0.6f, 0.6f, 0.6f, 1f));
+                prodRow.add(new Label("(" + (int)recipe.productionTime + "s)", timeStyle));
+            }
+            
+            w.add(prodRow).fillX().padBottom(10).row();
+        }
+
         Label.LabelStyle metaStyle = new Label.LabelStyle(hubSmallFont, new Color(0.6f, 0.85f, 1f, 1f));
-        w.add(new Label("Hub Tier " + recipe.requiredHubTier + " required", metaStyle)).padBottom(8).row();
+        w.add(new Label("Construction Cost:", metaStyle)).left().padBottom(4).row();
+
+        Label.LabelStyle costStyle = new Label.LabelStyle(hubSmallFont, new Color(1f, 1f, 1f, 1f));
+        for (Map.Entry<ItemType, Integer> entry : recipe.cost.entrySet()) {
+            Table matRow = new Table();
+            matRow.left();
+            TextureRegion tex = GameManager.getInstance().getItemTex(entry.getKey());
+            if (tex != null) {
+                Image img = new Image(tex);
+                img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+                matRow.add(img).size(16, 16).padRight(4);
+            }
+            String matName = formatItemName(entry.getKey());
+            matRow.add(new Label(matName + " x" + entry.getValue(), costStyle));
+            w.add(matRow).fillX().padLeft(8).padBottom(2).row();
+        }
+
+        w.add(new Label("Hub Tier " + recipe.requiredHubTier + " required", metaStyle)).padTop(8).padBottom(8).row();
 
         TextButton close = new TextButton("Close", makeButtonStyle());
         close.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 closeRecipeInfoPopup();
             }
         });
@@ -618,8 +752,20 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             item.setTouchable(Touchable.disabled);
             slotLabels[i] = item;
 
+            Image icon = new Image();
+            icon.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            icon.setTouchable(Touchable.disabled);
+            slotIcons[i] = icon;
+
+            // Image draws first (background of the stack), label text overlays on top so
+            // either the count (when textured) or the 2-letter fallback symbol stays readable.
+            Stack content = new Stack();
+            content.add(icon);
+            content.add(item);
+            content.setTouchable(Touchable.disabled);
+
             cell.add(num).top().left().expandX().padLeft(3).padTop(1).row();
-            cell.add(item).expand().center().row();
+            cell.add(content).expand().fill().pad(4).row();
             slotCells[i] = cell;
 
             cell.setTouchable(Touchable.enabled);
@@ -681,6 +827,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         devToggleButton.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
                 GameManager gm = GameManager.getInstance();
+                gm.playMenuSound();
                 boolean newState = !gm.isDevUnlimited();
                 gm.setDevUnlimited(newState);
                 if (!newState && player != null) {
@@ -717,6 +864,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         TextButton menuButton = new TextButton("MENU", s);
         menuButton.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 showMenuPopup();
             }
         });
@@ -747,6 +895,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         TextButton resumeBtn = new TextButton("Resume", s);
         resumeBtn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 if (menuPopup != null) menuPopup.remove();
                 menuPopup = null;
             }
@@ -755,6 +904,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         TextButton saveAndExitBtn = new TextButton("Save & Exit", s);
         saveAndExitBtn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 com.badlogic.gdx.Screen screen = GameManager.getInstance().getGame().getScreen();
                 if (screen instanceof com.david.astrodrill.screen.PlayScreen) {
                     ((com.david.astrodrill.screen.PlayScreen) screen).requestSave(true);
@@ -813,17 +963,28 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
 
         player.rebuildHotbar();
 
+        GameManager gm = GameManager.getInstance();
         int active = player.activeSlot;
         for (int i = 0; i < Player.HOTBAR_SLOTS; i++) {
             ItemType it = player.hotbar[i];
-            String symbol = getSlotSymbol(it);
+            TextureRegion region = it == null ? null : gm.getItemTex(it);
 
-            if (it != null && it != ItemType.DECONSTRUCT_TOOL) {
-                int count = player.getSlotItemCount(it);
-                if (count > 0) symbol += "\n" + count;
+            if (region != null) {
+                slotIcons[i].setDrawable(new TextureRegionDrawable(region));
+                int count = (it != ItemType.DECONSTRUCT_TOOL) ? player.getSlotItemCount(it) : 0;
+                slotLabels[i].setText(count > 0 ? String.valueOf(count) : "");
+                slotLabels[i].setAlignment(Align.bottomRight);
+            } else {
+                slotIcons[i].setDrawable(null);
+                String symbol = getSlotSymbol(it);
+                if (it != null && it != ItemType.DECONSTRUCT_TOOL) {
+                    int count = player.getSlotItemCount(it);
+                    if (count > 0) symbol += "\n" + count;
+                }
+                slotLabels[i].setText(symbol);
+                slotLabels[i].setAlignment(Align.center);
             }
 
-            slotLabels[i].setText(symbol);
             slotCells[i].setBackground(new TextureRegionDrawable(new TextureRegion(
                 i == active ? slotActiveBgTexture : slotBgTexture)));
         }

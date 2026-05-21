@@ -65,6 +65,7 @@ public class LeaderboardScreen implements Screen {
         back.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
+                GameManager.getInstance().playMenuSound();
                 GameManager.getInstance().changeScreen(ScreenType.MAIN_MENU);
             }
         });
