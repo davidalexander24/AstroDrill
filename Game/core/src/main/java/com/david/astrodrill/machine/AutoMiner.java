@@ -23,6 +23,11 @@ public class AutoMiner extends Machine {
     @Override public String getMachineType() { return "AutoMiner"; }
     @Override public String getSymbol() { return "AM"; }
 
+    /** AutoMiner uses mineTimer instead of processTimer, so override the base check. */
+    @Override public boolean isRunning() {
+        return isPowered && !userDisabled && mineTimer > 0f;
+    }
+
     @Override
     public void update(float delta, PlayScreen screen) {
         if (userDisabled) { isPowered = false; wantsPower = false; return; }
