@@ -120,6 +120,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         buildHotbarUI();
         buildBankingPopup();
         buildMenuButton();
+        buildDevButton();
     }
 
     private void rebuildTable() {
@@ -809,6 +810,39 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         stage.addActor(wrapper);
     }
 
+    private void buildDevButton() {
+        GameManager gm = GameManager.getInstance();
+        String username = gm.getCurrentUsername();
+        if (username == null || !"admin".equalsIgnoreCase(username.trim())) {
+            return;
+        }
+
+        Table wrapper = new Table();
+        wrapper.setFillParent(true);
+        wrapper.bottom().right();
+        wrapper.setTouchable(Touchable.childrenOnly);
+
+        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
+        s.font = hubButtonFont; s.fontColor = Color.WHITE;
+        s.overFontColor = new Color(0.6f, 0.85f, 1f, 1f);
+        s.up = new TextureRegionDrawable(new TextureRegion(buttonUpTexture));
+        s.over = new TextureRegionDrawable(new TextureRegion(buttonOverTexture));
+        s.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
+
+        final TextButton devBtn = new TextButton(gm.isDevUnlimited() ? "Dev Mode: ON" : "Dev Mode: OFF", s);
+        devBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                GameManager gm = GameManager.getInstance();
+                gm.playMenuSound();
+                gm.setDevUnlimited(!gm.isDevUnlimited());
+                devBtn.setText(gm.isDevUnlimited() ? "Dev Mode: ON" : "Dev Mode: OFF");
+            }
+        });
+
+        wrapper.add(devBtn).width(140).height(32).padBottom(8).padRight(8);
+        stage.addActor(wrapper);
+    }
+
     private void showMenuPopup() {
         if (menuPopup != null) {
             menuPopup.remove();
@@ -837,15 +871,26 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
             }
         });
         
-        TextButton saveAndExitBtn = new TextButton("Save & Exit", s);
+        final TextButton saveAndExitBtn = new TextButton("Save & Exit", s);
         saveAndExitBtn.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
                 GameManager.getInstance().playMenuSound();
                 com.badlogic.gdx.Screen screen = GameManager.getInstance().getGame().getScreen();
-                if (screen instanceof com.david.astrodrill.screen.PlayScreen) {
-                    ((com.david.astrodrill.screen.PlayScreen) screen).requestSave(true);
+                if (!(screen instanceof com.david.astrodrill.screen.PlayScreen)) {
+                    GameManager.getInstance().changeScreen(GameManager.ScreenType.MAIN_MENU);
+                    return;
                 }
-                GameManager.getInstance().changeScreen(GameManager.ScreenType.MAIN_MENU);
+                // Block double-clicks while the save POST is in flight; defer the screen
+                // change to the save's onSuccess so MainMenuScreen.checkForSave() sees the
+                // freshly-written row instead of the previous one.
+                saveAndExitBtn.setDisabled(true);
+                saveAndExitBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+                showBankingPopup("Saving...");
+                ((com.david.astrodrill.screen.PlayScreen) screen).requestSave(true, new Runnable() {
+                    @Override public void run() {
+                        GameManager.getInstance().changeScreen(GameManager.ScreenType.MAIN_MENU);
+                    }
+                });
             }
         });
 

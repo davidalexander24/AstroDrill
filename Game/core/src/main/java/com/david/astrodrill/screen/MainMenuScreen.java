@@ -130,6 +130,7 @@ public class MainMenuScreen implements Screen {
         panel.add(continueButton).row();
         panel.add(newGame).row();
         panel.add(leaderboard).row();
+
         panel.add(logout).row();
         panel.add(quit).row();
         panel.add(statusLabel).padTop(16).width(340).height(20).row();

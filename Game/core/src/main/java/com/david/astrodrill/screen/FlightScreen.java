@@ -35,6 +35,8 @@ public class FlightScreen implements Screen {
 
     private enum FlightState { ACTIVE, WIN, CRASH }
     private FlightState state = FlightState.ACTIVE;
+    /** Guard so the WIN-triggered leaderboard save only fires once. */
+    private boolean winReported = false;
 
     private OrthographicCamera worldCamera;
     private OrthographicCamera hudCamera;
@@ -156,6 +158,16 @@ public class FlightScreen implements Screen {
             // Win
             if (rocket.maxAltitude >= ESCAPE_ALTITUDE) {
                 state = FlightState.WIN;
+                if (!winReported) {
+                    winReported = true;
+                    com.david.astrodrill.screen.PlayScreen ps = GameManager.getInstance().getCurrentPlayScreen();
+                    if (ps != null && ps.getPlayer() != null) {
+                        ps.getPlayer().hasLaunchedSuccessfully = true;
+                        // Save now so the leaderboard picks up the new fastestLaunchTime
+                        // without waiting for the next Save & Exit.
+                        ps.requestSave(true);
+                    }
+                }
             }
             // Lose: out of fuel and falling
             else if (rocket.fuel <= 0f && rocket.body.getLinearVelocity().y <= 0f
@@ -166,9 +178,6 @@ public class FlightScreen implements Screen {
         
         if (thrusting) {
             engineAnimationTime += delta;
-            if (engineAnimationTime > 3 * ANIM_FRAME_DURATION) {
-                engineAnimationTime = 3 * ANIM_FRAME_DURATION;
-            }
             thrustReleaseTimer = 0f;
             if (rocketSound != null) {
                 if (!rocketSound.isPlaying()) {
@@ -179,6 +188,16 @@ public class FlightScreen implements Screen {
                 }
             }
         } else {
+            if (engineAnimationTime >= 4 * ANIM_FRAME_DURATION) {
+                int currentFrameIndex = (int)(engineAnimationTime / ANIM_FRAME_DURATION);
+                float partial = engineAnimationTime - (currentFrameIndex * ANIM_FRAME_DURATION);
+                int over = currentFrameIndex - 3;
+                if (over % 2 == 1) {
+                    engineAnimationTime = 2 * ANIM_FRAME_DURATION + partial;
+                } else {
+                    engineAnimationTime = 3 * ANIM_FRAME_DURATION + partial;
+                }
+            }
             engineAnimationTime -= delta;
             if (engineAnimationTime < 0f) {
                 engineAnimationTime = 0f;
@@ -231,7 +250,14 @@ public class FlightScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
         int frameIndex = (int)(engineAnimationTime / ANIM_FRAME_DURATION);
-        if (frameIndex > 3) frameIndex = 3;
+        if (frameIndex > 3) {
+            int over = frameIndex - 3;
+            if (over % 2 == 1) {
+                frameIndex = 2;
+            } else {
+                frameIndex = 3;
+            }
+        }
         if (frameIndex < 0) frameIndex = 0;
         
         float rx = rocket.body.getPosition().x;

@@ -384,6 +384,9 @@ public class PlayScreen implements Screen {
         int curDepth = Math.max(0, (int) Math.floor(-player.y));
         if (curDepth > sessionMaxDepth) sessionMaxDepth = curDepth;
 
+        // Accumulate playtime so the leaderboard's "fastest launch" reflects real game time.
+        player.playtimeMs += (long) (delta * 1000f);
+
         // ── Camera Zoom (+/-): smaller zoom = closer in ──────────────────
         if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.PLUS)) {
             camera.zoom = Math.max(MIN_ZOOM, camera.zoom - ZOOM_STEP);
@@ -755,6 +758,18 @@ public class PlayScreen implements Screen {
      * save-on-exit).
      */
     public void requestSave(boolean silent) {
+        requestSave(silent, null);
+    }
+
+    /**
+     * Same as {@link #requestSave(boolean)} but invokes {@code onSuccess} after the save
+     * POST completes successfully. Used by Save &amp; Exit so the screen transition only
+     * happens once the save row is in the DB — otherwise MainMenuScreen.checkForSave()
+     * races the in-flight POST and the Continue button loads a stale state.
+     * {@code onSuccess} is NOT invoked on save failure; the player stays on PlayScreen
+     * with the "Save failed: ..." toast and can retry.
+     */
+    public void requestSave(boolean silent, final Runnable onSuccess) {
         Long pid = GameManager.getInstance().getCurrentPlayerId();
         if (pid == null) {
             if (!silent) hud.showBankingPopup("Not logged in — cannot save");
@@ -768,14 +783,16 @@ public class PlayScreen implements Screen {
         if (!silent) hud.showBankingPopup("Saving...");
 
         String json = SaveStateSerializer.snapshot(this, player, landerHub);
+        long launchTime = player.hasLaunchedSuccessfully ? player.playtimeMs : 0L;
         SaveRequest req = new SaveRequest(
-                pid, json, 0, "PROXIMA_B", sessionMaxDepth, 0L);
+                pid, json, 0, "PROXIMA_B", sessionMaxDepth, launchTime);
 
         BackendClient.save(req, new BackendClient.Callback<SaveResponse>() {
             @Override
             public void onSuccess(SaveResponse result) {
                 savingInFlight = false;
                 if (!silent) hud.showBankingPopup("Saved.");
+                if (onSuccess != null) onSuccess.run();
             }
 
             @Override
@@ -811,6 +828,8 @@ public class PlayScreen implements Screen {
             player.applyWheelUpgrade();
             player.currentBattery = Math.min(dto.player.currentBattery, player.maxBattery);
             player.activeSlot = Math.min(Math.max(0, dto.player.activeSlot), Player.HOTBAR_SLOTS - 1);
+            player.playtimeMs = dto.player.playtimeMs;
+            player.hasLaunchedSuccessfully = dto.player.hasLaunchedSuccessfully;
 
             player.inventory.clear();
             player.inventory.putAll(SaveStateSerializer.stringMapToBlockEnum(dto.player.inventory));

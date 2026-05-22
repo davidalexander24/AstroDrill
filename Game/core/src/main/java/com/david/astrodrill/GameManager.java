@@ -93,6 +93,7 @@ public class GameManager {
     }
 
     private PlayScreen currentPlayScreen;
+    public PlayScreen getCurrentPlayScreen() { return currentPlayScreen; }
 
     public void changeScreen(ScreenType screenType) {
         if (game == null) return;

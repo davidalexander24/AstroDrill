@@ -65,6 +65,12 @@ public class Player {
     public int jetpackTier = 1;
     public int wheelTier = 1;
 
+    // ── Playtime / Launch Tracking ───────────────────────────────────────
+    /** Accumulated playtime in PlayScreen since the world was created (persisted across saves). */
+    public long playtimeMs = 0L;
+    /** Flips true on the first successful rocket launch. Gates leaderboard submission. */
+    public boolean hasLaunchedSuccessfully = false;
+
     /** Whether the current drill can break the given block type. */
     public boolean canMine(Block.BlockType t) {
         return drillStrength >= Block.requiredStrength(t);
