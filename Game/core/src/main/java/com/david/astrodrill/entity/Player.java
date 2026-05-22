@@ -24,6 +24,7 @@ public class Player {
     public float speed;
     public float stateTime = 0f;
     public boolean isMoving = false;
+    public boolean isJetting = false;
     public Rectangle bounds;
     public Map<Block.BlockType, Integer> inventory;
     private List<InventoryObserver> observers;
@@ -379,11 +380,11 @@ public class Player {
         velocityY += GRAVITY * delta;
 
         // Jetpack
-        boolean jetting = false;
+        isJetting = false;
         if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) {
             if (currentBattery > 0) {
                 velocityY += jetpackThrust * delta;
-                jetting = true;
+                isJetting = true;
             }
         }
 
@@ -406,7 +407,7 @@ public class Player {
 
         // Battery drain
         boolean mining = Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN);
-        if (jetting) {
+        if (isJetting) {
             currentBattery -= JETPACK_BATTERY_DRAIN * delta;
         } else if (moving || mining) {
             currentBattery -= 5f * delta;
@@ -415,7 +416,7 @@ public class Player {
         if (currentBattery < 0) currentBattery = 0;
         if (currentBattery <= 0) respawn();
 
-        isMoving = jetting || moving;
+        isMoving = isJetting || moving;
         if (isMoving) {
             stateTime += delta;
         } else {

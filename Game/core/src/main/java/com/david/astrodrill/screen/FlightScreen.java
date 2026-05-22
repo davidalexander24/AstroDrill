@@ -24,6 +24,7 @@ import com.david.astrodrill.entity.Rocket;
 import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.strategy.ChemicalEngine;
 import com.david.astrodrill.strategy.IonEngine;
+import com.badlogic.gdx.audio.Music;
 
 public class FlightScreen implements Screen {
 
@@ -52,8 +53,11 @@ public class FlightScreen implements Screen {
     private Texture rocketTexture;
     private TextureRegion[] rocketFrames;
     private Texture bgTexture;
+    private Texture scaffoldTexture;
     private float engineAnimationTime = 0f;
     private static final float ANIM_FRAME_DURATION = 0.1f;
+    private Music rocketSound;
+    private float thrustReleaseTimer = 0f;
 
     @Override
     public void show() {
@@ -76,20 +80,20 @@ public class FlightScreen implements Screen {
         // Launchpad
         BodyDef padDef = new BodyDef();
         padDef.type = BodyDef.BodyType.StaticBody;
-        padDef.position.set(0, -2);
+        padDef.position.set(0, -20.0625f);
         launchpad = world.createBody(padDef);
         PolygonShape padShape = new PolygonShape();
-        padShape.setAsBox(10f, 1f);
+        padShape.setAsBox(45f, 10f);
         launchpad.createFixture(padShape, 0.0f);
         padShape.dispose();
 
         // Rocket
         BodyDef rocketDef = new BodyDef();
         rocketDef.type = BodyDef.BodyType.DynamicBody;
-        rocketDef.position.set(0, 2);
+        rocketDef.position.set(0, -5.5625f);
         Body rocketBody = world.createBody(rocketDef);
         PolygonShape rocketShape = new PolygonShape();
-        rocketShape.setAsBox(1.0f, 3.0f, new Vector2(0f, 0.9f), 0f);
+        rocketShape.setAsBox(1.6f, 6f, new Vector2(0f, 1.5f), 0f);
         FixtureDef fixDef = new FixtureDef();
         fixDef.shape = rocketShape;
         fixDef.density = 1f;
@@ -115,6 +119,12 @@ public class FlightScreen implements Screen {
 
         bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
         bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
+        scaffoldTexture = new Texture(Gdx.files.internal("textures/scaffold.png"));
+        
+        if (Gdx.files.internal("sounds/Rocket.wav").exists()) {
+            rocketSound = Gdx.audio.newMusic(Gdx.files.internal("sounds/Rocket.wav"));
+            rocketSound.setLooping(true);
+        }
     }
 
     @Override
@@ -166,10 +176,34 @@ public class FlightScreen implements Screen {
             if (engineAnimationTime > 3 * ANIM_FRAME_DURATION) {
                 engineAnimationTime = 3 * ANIM_FRAME_DURATION;
             }
+            thrustReleaseTimer = 0f;
+            if (rocketSound != null) {
+                if (!rocketSound.isPlaying()) {
+                    rocketSound.setVolume(GameManager.getInstance().getSfxVolume());
+                    rocketSound.play();
+                } else {
+                    rocketSound.setVolume(GameManager.getInstance().getSfxVolume());
+                }
+            }
         } else {
             engineAnimationTime -= delta;
             if (engineAnimationTime < 0f) {
                 engineAnimationTime = 0f;
+            }
+            if (rocketSound != null && rocketSound.isPlaying()) {
+                thrustReleaseTimer += delta;
+                if (thrustReleaseTimer > 0.5f) {
+                    float elapsedFade = thrustReleaseTimer - 0.5f;
+                    float fadeDuration = 0.25f;
+                    float volumeFactor = 1f - (elapsedFade / fadeDuration);
+                    if (volumeFactor <= 0f) {
+                        volumeFactor = 0f;
+                        rocketSound.pause();
+                    }
+                    rocketSound.setVolume(volumeFactor * GameManager.getInstance().getSfxVolume());
+                } else {
+                    rocketSound.setVolume(GameManager.getInstance().getSfxVolume());
+                }
             }
         }
 
@@ -198,13 +232,8 @@ public class FlightScreen implements Screen {
         int srcY = (int)(-worldCamera.position.y * 20f);
         batch.draw(bgTexture, worldCamera.position.x - viewW / 2f, worldCamera.position.y - viewH / 2f,
                    viewW, viewH, srcX, srcY, (int)(viewW * 20f), (int)(viewH * 20f), false, false);
+        batch.draw(scaffoldTexture, -45f, -82.92f, 90f, 90f);
         batch.end();
-
-        shapeRenderer.setProjectionMatrix(worldCamera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0.3f, 0.3f, 0.35f, 1f);
-        shapeRenderer.rect(-20f, -3f, 40f, 2f);
-        shapeRenderer.end();
         
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
@@ -215,7 +244,7 @@ public class FlightScreen implements Screen {
         float rx = rocket.body.getPosition().x;
         float ry = rocket.body.getPosition().y;
         float angle = rocket.body.getAngle() * com.badlogic.gdx.math.MathUtils.radiansToDegrees;
-        batch.draw(rocketFrames[frameIndex], rx - 2.5f, ry - 10f, 2.5f, 10f, 5f, 20f, 1f, 1f, angle);
+        batch.draw(rocketFrames[frameIndex], rx - 4.0f, ry - 16.0f, 4.0f, 16.0f, 8.0f, 32.0f, 1f, 1f, angle);
         batch.end();
 
         // ── Render HUD ───────────────────────────────────────────────────
@@ -255,7 +284,7 @@ public class FlightScreen implements Screen {
 
     @Override
     public void resize(int width, int height) {
-        float viewportWidth = 90f;
+        float viewportWidth = 140f;
         float viewportHeight = viewportWidth * ((float) height / width);
         worldCamera.setToOrtho(false, viewportWidth, viewportHeight);
         worldCamera.position.set(0, 0, 0);
@@ -266,7 +295,15 @@ public class FlightScreen implements Screen {
 
     @Override public void pause() {}
     @Override public void resume() {}
-    @Override public void hide() {}
+    
+    @Override
+    public void hide() {
+        if (rocketSound != null) {
+            rocketSound.stop();
+            rocketSound.dispose();
+            rocketSound = null;
+        }
+    }
 
     @Override
     public void dispose() {
@@ -279,5 +316,10 @@ public class FlightScreen implements Screen {
         if (generator != null) generator.dispose();
         if (rocketTexture != null) rocketTexture.dispose();
         if (bgTexture != null) bgTexture.dispose();
+        if (scaffoldTexture != null) scaffoldTexture.dispose();
+        if (rocketSound != null) {
+            rocketSound.dispose();
+            rocketSound = null;
+        }
     }
 }

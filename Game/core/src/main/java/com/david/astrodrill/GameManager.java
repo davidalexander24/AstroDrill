@@ -61,6 +61,7 @@ public class GameManager {
     private TextureRegion hubTex;
     private final Map<Class<? extends Machine>, TextureRegion> machineTex = new HashMap<>();
     private final Map<Class<? extends Machine>, TextureRegion> machineOffTex = new HashMap<>();
+    private final Map<Class<? extends Machine>, Animation<TextureRegion>> machineAnim = new HashMap<>();
     private final List<Texture> ownedTextures = new ArrayList<>();
     private Sound menuSound;
 
@@ -365,7 +366,22 @@ public class GameManager {
         Texture t = new Texture(Gdx.files.internal(path));
         t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         ownedTextures.add(t);
-        machineTex.put(cls, new TextureRegion(t));
+        
+        String animPath = path.replace(".png", "_anim.png");
+        if (Gdx.files.internal(animPath).exists()) {
+            Texture at = new Texture(Gdx.files.internal(animPath));
+            at.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            ownedTextures.add(at);
+            TextureRegion[][] tmp = TextureRegion.split(at, at.getWidth() / 4, at.getHeight());
+            TextureRegion[] frames = new TextureRegion[4];
+            for (int i = 0; i < 4; i++) frames[i] = tmp[0][i];
+            Animation<TextureRegion> anim = new Animation<>(0.25f, frames);
+            anim.setPlayMode(Animation.PlayMode.LOOP);
+            machineAnim.put(cls, anim);
+            machineTex.put(cls, frames[0]);
+        } else {
+            machineTex.put(cls, new TextureRegion(t));
+        }
     }
 
     private void loadMachineOff(Class<? extends Machine> cls, String path) {
@@ -390,6 +406,14 @@ public class GameManager {
     public TextureRegion getHubTex() { return hubTex; }
     public TextureRegion getMachineTex(Machine m) {
         return m == null ? null : machineTex.get(m.getClass());
+    }
+    public TextureRegion getMachineFrame(Machine m, float stateTime) {
+        if (m == null) return null;
+        Animation<TextureRegion> anim = machineAnim.get(m.getClass());
+        if (anim != null) {
+            return anim.getKeyFrame(stateTime);
+        }
+        return machineTex.get(m.getClass());
     }
     public TextureRegion getMachineOffTex(Machine m) {
         return m == null ? null : machineOffTex.get(m.getClass());

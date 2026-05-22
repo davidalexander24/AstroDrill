@@ -48,23 +48,23 @@ public class MenuSkin implements Disposable {
 
     public MenuSkin() {
         generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
-        titleFont = font(36, Color.WHITE, 2f);
-        buttonFont = font(20, Color.WHITE, 1f);
+        titleFont = font(54, Color.WHITE, 2f);
+        buttonFont = font(22, Color.WHITE, 1f);
         labelFont = font(18, Color.WHITE, 1f);
         smallFont = font(14, Color.LIGHT_GRAY, 0.5f);
 
-        Drawable buttonUp = solid(0.15f, 0.25f, 0.45f, 0.95f);
-        Drawable buttonOver = solid(0.2f, 0.35f, 0.6f, 1f);
-        Drawable buttonDown = solid(0.1f, 0.18f, 0.35f, 1f);
-        Drawable buttonDisabled = solid(0.12f, 0.12f, 0.15f, 0.6f);
-        Drawable fieldBg = solid(0.05f, 0.05f, 0.1f, 0.95f);
+        Drawable buttonUp = borderedSolid(0.0f, 0.7f, 1.0f, 0.8f, 0.05f, 0.1f, 0.2f, 0.8f, 64, 2);
+        Drawable buttonOver = borderedSolid(0.2f, 0.9f, 1.0f, 1.0f, 0.1f, 0.2f, 0.4f, 0.9f, 64, 2);
+        Drawable buttonDown = borderedSolid(0.0f, 0.4f, 0.6f, 0.8f, 0.02f, 0.05f, 0.1f, 0.8f, 64, 2);
+        Drawable buttonDisabled = borderedSolid(0.3f, 0.3f, 0.4f, 0.5f, 0.1f, 0.1f, 0.15f, 0.6f, 64, 2);
+        Drawable fieldBg = solid(0.05f, 0.05f, 0.1f, 0.8f);
         Drawable cursor = solid(0.9f, 0.9f, 1f, 1f);
         Drawable selection = solid(0.3f, 0.5f, 0.8f, 0.6f);
         Drawable checkOff = solidSize(0.1f, 0.1f, 0.15f, 0.95f, 24);
         Drawable checkOn = borderedSolid(0.1f, 0.1f, 0.15f, 0.95f, 0.3f, 0.6f, 0.9f, 1f, 24, 4);
 
-        panelBackground = solid(0.08f, 0.08f, 0.15f, 0.92f);
-        rowBackground = solid(0.12f, 0.12f, 0.18f, 0.7f);
+        panelBackground = solid(0.02f, 0.04f, 0.1f, 0.7f);
+        rowBackground = solid(0.12f, 0.12f, 0.18f, 0.5f);
 
         buttonStyle = new TextButton.TextButtonStyle();
         buttonStyle.font = buttonFont;

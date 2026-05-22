@@ -5,6 +5,7 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
@@ -16,7 +17,11 @@ import com.david.astrodrill.network.BackendClient;
 import com.david.astrodrill.network.BackendException;
 import com.david.astrodrill.network.dto.LoadResponse;
 import com.david.astrodrill.ui.MenuSkin;
-
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.MathUtils;
 public class MainMenuScreen implements Screen {
 
     private Stage stage;
@@ -24,11 +29,31 @@ public class MainMenuScreen implements Screen {
     private TextButton continueButton;
     private Label statusLabel;
     private String loadedSaveBlob;
+    
+    private SpriteBatch batch;
+    private Texture bgTexture;
+    private float bgOffset = 0f;
+    private Texture rocketTexture;
+    private Animation<TextureRegion> rocketAnim;
+    private float stateTime = 0f;
+    private Texture logoTexture;
 
     @Override
     public void show() {
         stage = new Stage(new ScreenViewport());
         skin = new MenuSkin();
+        
+        batch = new SpriteBatch();
+        
+        bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
+        bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
+        
+        rocketTexture = new Texture(Gdx.files.internal("textures/rocket_anim.png"));
+        TextureRegion[][] tmp = TextureRegion.split(rocketTexture, rocketTexture.getWidth() / 4, rocketTexture.getHeight());
+        TextureRegion[] frames = new TextureRegion[4];
+        for (int i = 0; i < 4; i++) frames[i] = tmp[0][i];
+        rocketAnim = new Animation<>(0.25f, frames);
+        rocketAnim.setPlayMode(Animation.PlayMode.LOOP);
 
         Table root = new Table();
         root.setFillParent(true);
@@ -36,7 +61,12 @@ public class MainMenuScreen implements Screen {
         stage.addActor(root);
 
         GameManager gm = GameManager.getInstance();
-        Label title = new Label("ASTRODRILL", skin.titleStyle);
+        
+        // Create the title image and ensure it maintains aspect ratio
+        logoTexture = new Texture(Gdx.files.internal("textures/logo.png"));
+        Image title = new Image(logoTexture);
+        title.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+        
         String userName = gm.getCurrentUsername() != null ? gm.getCurrentUsername() : "?";
         Label welcome = new Label("Logged in as " + userName, skin.smallStyle);
 
@@ -102,8 +132,9 @@ public class MainMenuScreen implements Screen {
         panel.add(quit).row();
         panel.add(statusLabel).padTop(16).width(340).height(20).row();
 
-        root.add(title).padBottom(4).row();
-        root.add(welcome).padBottom(20).row();
+        // Properly size the logo and remove the left padding on the panel so it's perfectly centered
+        root.add(title).width(960).height(300).padBottom(4).row();
+        root.add(welcome).padBottom(40).row();
         root.add(panel);
 
         Gdx.input.setInputProcessor(stage);
@@ -150,8 +181,40 @@ public class MainMenuScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        stateTime += delta;
+        bgOffset += delta * 25f; // scroll speed
+        
         Gdx.gl.glClearColor(0.02f, 0.03f, 0.06f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        
+        float screenW = Gdx.graphics.getWidth();
+        float screenH = Gdx.graphics.getHeight();
+        
+        batch.begin();
+        batch.draw(bgTexture, 0, 0, (int)bgOffset, (int)(-bgOffset), (int)screenW, (int)screenH);
+        
+        TextureRegion currentFrame = rocketAnim.getKeyFrame(stateTime);
+        
+        float rocketBaseW = currentFrame.getRegionWidth();
+        float rocketBaseH = currentFrame.getRegionHeight();
+        
+        // Limit size to size of screen, always full rendered
+        float scale = Math.min(screenW / rocketBaseW, screenH / rocketBaseH);
+        
+        float rocketW = rocketBaseW * scale;
+        float rocketH = rocketBaseH * scale;
+        
+        // Change this value to adjust how far right or left the rocket is
+        // 0 = perfectly centered. Positive = right, Negative = left.
+        float horizontalOffset = -screenW * 0.25f; 
+        
+        // Fixed in the middle vertically, centered horizontally + offset
+        float rX = (screenW - rocketW) / 2f + horizontalOffset;
+        float rY = (screenH - rocketH) / 2f;
+        
+        batch.draw(currentFrame, rX, rY, rocketW, rocketH);
+        batch.end();
+        
         stage.act(delta);
         stage.draw();
     }
@@ -159,6 +222,9 @@ public class MainMenuScreen implements Screen {
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
+        if (batch != null) {
+            batch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+        }
     }
 
     @Override public void pause() {}
@@ -169,5 +235,9 @@ public class MainMenuScreen implements Screen {
     public void dispose() {
         if (stage != null) stage.dispose();
         if (skin != null) skin.dispose();
+        if (batch != null) batch.dispose();
+        if (bgTexture != null) bgTexture.dispose();
+        if (rocketTexture != null) rocketTexture.dispose();
+        if (logoTexture != null) logoTexture.dispose();
     }
 }

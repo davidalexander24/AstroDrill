@@ -60,11 +60,14 @@ public class PlayScreen implements Screen {
     private float clickCooldown = 0f;
     private Vector3 pendingClick = null;
     private Vector3 pendingRightClick = null;
+    private float machineStateTime = 0f;
     private BitmapFont machineFont;
     private Rectangle placementCheck = new Rectangle();
     private Sound mineSound;
     private Music drillSound;
     private Sound placeSound;
+    private Sound jetpackSound;
+    private float jetpackSoundTimer = 0f;
 
     // Auto-banking: only bank once per zone entry
     private boolean hasbankedThisEntry = false;
@@ -133,6 +136,7 @@ public class PlayScreen implements Screen {
         mineSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Mine.wav"));
         drillSound = Gdx.audio.newMusic(Gdx.files.internal("sounds/Drill.wav"));
         placeSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Place.wav"));
+        jetpackSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Jetpack.wav"));
 
         bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
         bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
@@ -350,7 +354,21 @@ public class PlayScreen implements Screen {
         // through the terrain before collision has a chance to catch them.
         if (delta > 0.05f) delta = 0.05f;
 
+        machineStateTime += delta;
         player.update(delta);
+
+        // Jetpack Sound Effect
+        if (player.isJetting) {
+            if (jetpackSoundTimer <= 0f) {
+                if (jetpackSound != null) {
+                    jetpackSound.play(GameManager.getInstance().getSfxVolume());
+                }
+                jetpackSoundTimer = 0.36f;
+            }
+            jetpackSoundTimer -= delta;
+        } else {
+            jetpackSoundTimer = 0f;
+        }
 
         // ── Hotbar Slot Selection (Number Keys 1-9) ──────────────────────
         for (int i = 0; i < 9; i++) {
@@ -597,7 +615,7 @@ public class PlayScreen implements Screen {
             if (machine.y + machine.height < viewMinY || machine.y > viewMaxY) continue;
             TextureRegion mTex;
             if (machine.isRunning()) {
-                mTex = gm.getMachineTex(machine);
+                mTex = gm.getMachineFrame(machine, machineStateTime);
             } else {
                 mTex = gm.getMachineOffTex(machine);
                 if (mTex == null) mTex = gm.getMachineTex(machine);
@@ -724,6 +742,7 @@ public class PlayScreen implements Screen {
         if (mineSound != null) mineSound.dispose();
         if (drillSound != null) drillSound.dispose();
         if (placeSound != null) placeSound.dispose();
+        if (jetpackSound != null) jetpackSound.dispose();
         if (bgTexture != null) bgTexture.dispose();
         shapeRenderer.dispose();
         batch.dispose();

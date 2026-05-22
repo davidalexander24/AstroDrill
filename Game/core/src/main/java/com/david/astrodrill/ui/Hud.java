@@ -98,9 +98,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private float bankingPopupTimer = 0f;
     private BitmapFont bankingFont;
 
-    // Dev toggle button
-    private TextButton devToggleButton;
-
     // Menu Popup
     private Window menuPopup;
     private Texture sliderBgTexture, sliderKnobTexture;
@@ -127,7 +124,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         buildHubPanel();
         buildHotbarUI();
         buildBankingPopup();
-        buildDevToggle();
         buildMenuButton();
     }
 
@@ -808,43 +804,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         bankingPopupTimer = 2.5f;
     }
 
-    // ── Dev Toggle Button ────────────────────────────────────────────────
-
-    private void buildDevToggle() {
-        Table wrapper = new Table();
-        wrapper.setFillParent(true);
-        wrapper.bottom().right();
-        wrapper.setTouchable(Touchable.childrenOnly);
-
-        TextButton.TextButtonStyle s = new TextButton.TextButtonStyle();
-        s.font = hubButtonFont; s.fontColor = Color.WHITE;
-        s.overFontColor = new Color(0.6f, 0.85f, 1f, 1f);
-        s.up = new TextureRegionDrawable(new TextureRegion(buttonUpTexture));
-        s.over = new TextureRegionDrawable(new TextureRegion(buttonOverTexture));
-        s.down = new TextureRegionDrawable(new TextureRegion(buttonDownTexture));
-
-        devToggleButton = new TextButton(devLabel(), s);
-        devToggleButton.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                GameManager gm = GameManager.getInstance();
-                gm.playMenuSound();
-                boolean newState = !gm.isDevUnlimited();
-                gm.setDevUnlimited(newState);
-                if (!newState && player != null) {
-                    // Spec: turning dev OFF wipes any items the player was holding
-                    player.inventory.clear();
-                    player.machineInventory.clear();
-                    player.notifyObservers();
-                }
-                devToggleButton.setText(devLabel());
-                showBankingPopup(newState ? "DEV resources ON" : "DEV resources OFF — inventory cleared");
-            }
-        });
-
-        wrapper.add(devToggleButton).width(140).height(32).padBottom(8).padRight(8);
-        stage.addActor(wrapper);
-    }
-
     private void buildMenuButton() {
         sliderBgTexture = createSolidTexture(0.3f, 0.3f, 0.3f, 1f);
         sliderKnobTexture = createSolidTexture(0.8f, 0.8f, 0.8f, 1f);
@@ -947,10 +906,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
                       (stage.getHeight() - w.getHeight()) / 2f);
         stage.addActor(w);
         menuPopup = w;
-    }
-
-    private String devLabel() {
-        return "DEV: " + (GameManager.getInstance().isDevUnlimited() ? "ON" : "OFF");
     }
 
     public void updateHotbar(float delta) {

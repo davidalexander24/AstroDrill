@@ -5,14 +5,17 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.david.astrodrill.GameManager;
 import com.david.astrodrill.GameManager.ScreenType;
@@ -38,6 +41,7 @@ public class LoginScreen implements Screen {
     private TextButton loginButton;
     private TextButton registerButton;
     private boolean busy = false;
+    private Texture logoTexture;
 
     @Override
     public void show() {
@@ -52,7 +56,9 @@ public class LoginScreen implements Screen {
         root.center();
         stage.addActor(root);
 
-        Label title = new Label("ASTRODRILL", skin.titleStyle);
+        logoTexture = new Texture(Gdx.files.internal("textures/logo.png"));
+        Image title = new Image(logoTexture);
+        title.setScaling(Scaling.fit);
         Label subtitle = new Label("Sign in to your colony", skin.smallStyle);
 
         Table panel = new Table();
@@ -99,7 +105,7 @@ public class LoginScreen implements Screen {
 
         panel.add(statusLabel).width(320).padTop(12).row();
 
-        root.add(title).padBottom(4).row();
+        root.add(title).width(960).height(300).padBottom(4).row();
         root.add(subtitle).padBottom(20).row();
         root.add(panel);
 
@@ -208,5 +214,6 @@ public class LoginScreen implements Screen {
     public void dispose() {
         if (stage != null) stage.dispose();
         if (skin != null) skin.dispose();
+        if (logoTexture != null) logoTexture.dispose();
     }
 }

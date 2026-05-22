@@ -32,7 +32,7 @@ public class Rocket {
     public float getThrustFactor() {
         float t = Math.min(thrustBuildupTime / THRUST_BUILDUP_DURATION, 1f);
         // Quadratic ease-in: starts at 0, gentle ramp, then accelerates
-        return MIN_THRUST_FACTOR + (1f - MIN_THRUST_FACTOR) * t;
+        return MIN_THRUST_FACTOR + (1f - MIN_THRUST_FACTOR) * t * t;
     }
 
     /** Call each frame when NOT thrusting to let the engine spool down. */
@@ -57,6 +57,16 @@ public class Rocket {
         float angle = body.getAngle() + MathUtils.PI / 2f;
         float forceX = MathUtils.cos(angle) * thrust;
         float forceY = MathUtils.sin(angle) * thrust;
+
+        if ("Ion".equals(engine.getName())) {
+            float gravityY = 9.8f;
+            if (body.getWorld() != null) {
+                gravityY = -body.getWorld().getGravity().y;
+            }
+            float gravityCompY = body.getMass() * gravityY;
+            forceY += gravityCompY;
+        }
+
         body.applyForceToCenter(new Vector2(forceX, forceY), true);
 
         fuel -= engine.getFuelBurnRate() * delta;
