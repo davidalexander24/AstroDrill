@@ -10,7 +10,6 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
@@ -24,6 +23,7 @@ import com.david.astrodrill.entity.Rocket;
 import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.strategy.ChemicalEngine;
 import com.david.astrodrill.strategy.IonEngine;
+import com.david.astrodrill.ui.Fonts;
 import com.badlogic.gdx.audio.Music;
 
 public class FlightScreen implements Screen {
@@ -47,7 +47,6 @@ public class FlightScreen implements Screen {
     private SpriteBatch batch;
     private BitmapFont hudFont;
     private BitmapFont bigFont;
-    private FreeTypeFontGenerator generator;
     private ShapeRenderer shapeRenderer;
     
     private Texture rocketTexture;
@@ -68,14 +67,8 @@ public class FlightScreen implements Screen {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
 
-        generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
-        FreeTypeFontGenerator.FreeTypeFontParameter hp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        hp.size = 22; hp.color = Color.WHITE; hp.borderWidth = 1.5f; hp.borderColor = Color.BLACK;
-        hudFont = generator.generateFont(hp);
-
-        FreeTypeFontGenerator.FreeTypeFontParameter bp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        bp.size = 48; bp.color = Color.WHITE; bp.borderWidth = 2.5f; bp.borderColor = Color.BLACK;
-        bigFont = generator.generateFont(bp);
+        hudFont = Fonts.create(22, Color.WHITE, 1.5f);
+        bigFont = Fonts.create(48, Color.WHITE, 2.5f);
 
         // Launchpad
         BodyDef padDef = new BodyDef();
@@ -254,13 +247,13 @@ public class FlightScreen implements Screen {
         float h = hudCamera.viewportHeight;
 
         hudFont.setColor(Color.WHITE);
-        hudFont.draw(batch, String.format("Altitude: %.0f m  /  %.0f", rocket.maxAltitude, ESCAPE_ALTITUDE), 20, h - 20);
+        hudFont.draw(batch, "Altitude: " + Math.round(rocket.maxAltitude) + " m  /  " + Math.round(ESCAPE_ALTITUDE), 20, h - 20);
         float fuelPct = (rocket.fuel / rocket.maxFuel) * 100f;
         hudFont.setColor(fuelPct < 25f ? Color.RED : (fuelPct < 50f ? Color.YELLOW : Color.WHITE));
-        hudFont.draw(batch, String.format("Fuel: %.0f%%", fuelPct), 20, h - 48);
+        hudFont.draw(batch, "Fuel: " + Math.round(fuelPct) + "%", 20, h - 48);
         float thrustPct = rocket.getThrustFactor() * 100f;
         hudFont.setColor(thrustPct < 30f ? new Color(1f, 0.6f, 0.2f, 1f) : (thrustPct < 70f ? Color.YELLOW : new Color(0.4f, 1f, 0.5f, 1f)));
-        hudFont.draw(batch, String.format("Thrust: %.0f%%", thrustPct), 20, h - 76);
+        hudFont.draw(batch, "Thrust: " + Math.round(thrustPct) + "%", 20, h - 76);
         hudFont.setColor(new Color(0.6f, 0.85f, 1f, 1f));
         hudFont.draw(batch, "Engine: " + rocket.getEngine().getName() + "  (E to swap)", 20, h - 104);
 
@@ -313,7 +306,6 @@ public class FlightScreen implements Screen {
         if (batch != null) batch.dispose();
         if (hudFont != null) hudFont.dispose();
         if (bigFont != null) bigFont.dispose();
-        if (generator != null) generator.dispose();
         if (rocketTexture != null) rocketTexture.dispose();
         if (bgTexture != null) bgTexture.dispose();
         if (scaffoldTexture != null) scaffoldTexture.dispose();

@@ -1,12 +1,10 @@
 package com.david.astrodrill.ui;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
@@ -43,15 +41,13 @@ public class MenuSkin implements Disposable {
     public final Drawable panelBackground;
     public final Drawable rowBackground;
 
-    private final FreeTypeFontGenerator generator;
     private final List<Texture> textures = new ArrayList<>();
 
     public MenuSkin() {
-        generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
-        titleFont = font(54, Color.WHITE, 2f);
-        buttonFont = font(22, Color.WHITE, 1f);
-        labelFont = font(18, Color.WHITE, 1f);
-        smallFont = font(14, Color.LIGHT_GRAY, 0.5f);
+        titleFont = Fonts.create(54, Color.WHITE, 2f);
+        buttonFont = Fonts.create(22, Color.WHITE, 1f);
+        labelFont = Fonts.create(18, Color.WHITE, 1f);
+        smallFont = Fonts.create(14, Color.LIGHT_GRAY, 0.5f);
 
         Drawable buttonUp = borderedSolid(0.0f, 0.7f, 1.0f, 0.8f, 0.05f, 0.1f, 0.2f, 0.8f, 64, 2);
         Drawable buttonOver = borderedSolid(0.2f, 0.9f, 1.0f, 1.0f, 0.1f, 0.2f, 0.4f, 0.9f, 64, 2);
@@ -101,15 +97,6 @@ public class MenuSkin implements Disposable {
         checkBoxStyle.checkboxOn = checkOn;
     }
 
-    private BitmapFont font(int size, Color color, float border) {
-        FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        p.size = size;
-        p.color = color;
-        p.borderWidth = border;
-        p.borderColor = Color.BLACK;
-        return generator.generateFont(p);
-    }
-
     private Drawable solid(float r, float g, float b, float a) {
         return solidSize(r, g, b, a, 1);
     }
@@ -144,7 +131,6 @@ public class MenuSkin implements Disposable {
         buttonFont.dispose();
         labelFont.dispose();
         smallFont.dispose();
-        generator.dispose();
         for (Texture t : textures) t.dispose();
         textures.clear();
     }

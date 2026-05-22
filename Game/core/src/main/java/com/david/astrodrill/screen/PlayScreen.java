@@ -36,7 +36,7 @@ import com.david.astrodrill.entity.LanderHub;
 import com.david.astrodrill.machine.CoalGenerator;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.david.astrodrill.ui.Fonts;
 import com.badlogic.gdx.math.Rectangle;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -108,75 +108,73 @@ public class PlayScreen implements Screen {
     public Player getPlayer() { return player; }
     public Pool<Block> getBlockPool() { return blockPool; }
 
+    private boolean initialized = false;
+
     @Override
     public void show() {
-        camera = new OrthographicCamera();
-        shapeRenderer = new ShapeRenderer();
-        batch = new SpriteBatch();
-        GameManager.getInstance().ensureTexturesLoaded();
-        hud = new Hud(batch);
+        if (!initialized) {
+            camera = new OrthographicCamera();
+            shapeRenderer = new ShapeRenderer();
+            batch = new SpriteBatch();
+            GameManager.getInstance().ensureTexturesLoaded();
+            hud = new Hud(batch);
 
-        String pending = GameManager.getInstance().consumePendingSaveBlob();
-        SaveStateSerializer.GameSaveDto dto = pending != null ? SaveStateSerializer.parse(pending) : null;
+            String pending = GameManager.getInstance().consumePendingSaveBlob();
+            SaveStateSerializer.GameSaveDto dto = pending != null ? SaveStateSerializer.parse(pending) : null;
 
-        long seed = (dto != null && dto.world != null) ? dto.world.seed : System.currentTimeMillis();
-        generateWorld(seed);
+            long seed = (dto != null && dto.world != null) ? dto.world.seed : System.currentTimeMillis();
+            generateWorld(seed);
 
-        landerHub = new LanderHub(47.5f, 1f, 6f, 3f);
+            landerHub = new LanderHub(47.5f, 1f, 6f, 3f);
 
-        FreeTypeFontGenerator.FreeTypeFontParameter machineParam = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        machineParam.size = 12;
-        machineParam.color = Color.WHITE;
-        machineParam.borderWidth = 1f;
-        machineParam.borderColor = Color.BLACK;
-        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
-        machineFont = gen.generateFont(machineParam);
-        gen.dispose();
+            machineFont = Fonts.create(12, Color.WHITE, 1f);
 
-        mineSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Mine.wav"));
-        drillSound = Gdx.audio.newMusic(Gdx.files.internal("sounds/Drill.wav"));
-        placeSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Place.wav"));
-        jetpackSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Jetpack.wav"));
+            mineSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Mine.wav"));
+            drillSound = Gdx.audio.newMusic(Gdx.files.internal("sounds/Drill.wav"));
+            placeSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Place.wav"));
+            jetpackSound = Gdx.audio.newSound(Gdx.files.internal("sounds/Jetpack.wav"));
 
-        bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
-        bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
+            bgTexture = new Texture(Gdx.files.internal("textures/space_bg.png"));
+            bgTexture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
 
-        player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
-        player.addObserver(hud);
-        hud.setPlayer(player);
-        hud.setLanderHub(landerHub);
+            player = new Player(53f, 1f, BLOCK_SIZE * 0.8f, BLOCK_SIZE * 0.8f);
+            player.addObserver(hud);
+            hud.setPlayer(player);
+            hud.setLanderHub(landerHub);
 
-        GameManager.getInstance().addObserver(hud);
+            GameManager.getInstance().addObserver(hud);
 
-        if (dto != null) {
-            restoreFromDto(dto);
+            if (dto != null) {
+                restoreFromDto(dto);
+            }
+
+            inputMultiplexer = new InputMultiplexer();
+            inputMultiplexer.addProcessor(hud.stage);
+            inputMultiplexer.addProcessor(new InputAdapter() {
+                @Override
+                public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+                    Vector3 world = camera.unproject(new Vector3(screenX, screenY, 0));
+                    float gx = MathUtils.floor(world.x / BLOCK_SIZE) * BLOCK_SIZE;
+                    float gy = MathUtils.floor(world.y / BLOCK_SIZE) * BLOCK_SIZE;
+                    if (button == Input.Buttons.LEFT) {
+                        pendingClick = new Vector3(gx, gy, 0);
+                        return true;
+                    }
+                    if (button == Input.Buttons.RIGHT) {
+                        pendingRightClick = new Vector3(gx, gy, 0);
+                        return true;
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean scrolled(float amountX, float amountY) {
+                    player.scrollHotbar(amountY > 0 ? 1 : -1);
+                    return true;
+                }
+            });
+            initialized = true;
         }
-
-        inputMultiplexer = new InputMultiplexer();
-        inputMultiplexer.addProcessor(hud.stage);
-        inputMultiplexer.addProcessor(new InputAdapter() {
-            @Override
-            public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-                Vector3 world = camera.unproject(new Vector3(screenX, screenY, 0));
-                float gx = MathUtils.floor(world.x / BLOCK_SIZE) * BLOCK_SIZE;
-                float gy = MathUtils.floor(world.y / BLOCK_SIZE) * BLOCK_SIZE;
-                if (button == Input.Buttons.LEFT) {
-                    pendingClick = new Vector3(gx, gy, 0);
-                    return true;
-                }
-                if (button == Input.Buttons.RIGHT) {
-                    pendingRightClick = new Vector3(gx, gy, 0);
-                    return true;
-                }
-                return false;
-            }
-
-            @Override
-            public boolean scrolled(float amountX, float amountY) {
-                player.scrollHotbar(amountY > 0 ? 1 : -1);
-                return true;
-            }
-        });
         Gdx.input.setInputProcessor(inputMultiplexer);
     }
 

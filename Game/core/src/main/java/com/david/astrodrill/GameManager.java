@@ -92,6 +92,8 @@ public class GameManager {
         this.game = game;
     }
 
+    private PlayScreen currentPlayScreen;
+
     public void changeScreen(ScreenType screenType) {
         if (game == null) return;
 
@@ -103,13 +105,20 @@ public class GameManager {
                 game.setScreen(new LoginScreen());
                 break;
             case MAIN_MENU:
+                if (currentPlayScreen != null) {
+                    currentPlayScreen.dispose();
+                    currentPlayScreen = null;
+                }
                 game.setScreen(new MainMenuScreen());
                 break;
             case LEADERBOARD:
                 game.setScreen(new LeaderboardScreen());
                 break;
             case PLAY:
-                game.setScreen(new PlayScreen());
+                if (currentPlayScreen == null) {
+                    currentPlayScreen = new PlayScreen();
+                }
+                game.setScreen(currentPlayScreen);
                 break;
             case FLIGHT:
                 game.setScreen(new FlightScreen());

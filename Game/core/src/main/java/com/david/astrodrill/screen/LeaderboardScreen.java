@@ -121,7 +121,7 @@ public class LeaderboardScreen implements Screen {
         long totalSec = ms / 1000;
         long m = totalSec / 60;
         long s = totalSec % 60;
-        return String.format("%d:%02d", m, s);
+        return m + ":" + (s < 10 ? "0" + s : Long.toString(s));
     }
 
     @Override

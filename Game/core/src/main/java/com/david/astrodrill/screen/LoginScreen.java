@@ -54,6 +54,7 @@ public class LoginScreen implements Screen {
         Table root = new Table();
         root.setFillParent(true);
         root.center();
+        root.padBottom(100);
         stage.addActor(root);
 
         logoTexture = new Texture(Gdx.files.internal("textures/logo.png"));
@@ -82,6 +83,7 @@ public class LoginScreen implements Screen {
 
         loginButton = new TextButton("Log In", skin.buttonStyle);
         registerButton = new TextButton("Register", skin.buttonStyle);
+        TextButton guestButton = new TextButton("Play as Guest", skin.buttonStyle);
 
         loginButton.addListener(new ClickListener() {
             @Override
@@ -90,6 +92,15 @@ public class LoginScreen implements Screen {
         registerButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) { GameManager.getInstance().playMenuSound(); attemptRegister(); }
+        });
+        guestButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (busy) return;
+                GameManager.getInstance().playMenuSound();
+                GameManager.getInstance().clearCurrentUser();
+                GameManager.getInstance().changeScreen(ScreenType.MAIN_MENU);
+            }
         });
 
         panel.add(new Label("Username", skin.labelStyle)).row();
@@ -102,10 +113,11 @@ public class LoginScreen implements Screen {
         buttonRow.add(loginButton).width(150).height(40).padRight(8);
         buttonRow.add(registerButton).width(150).height(40);
         panel.add(buttonRow).padTop(16).row();
+        panel.add(guestButton).width(308).height(36).padTop(4).row();
 
         panel.add(statusLabel).width(320).padTop(12).row();
 
-        root.add(title).width(960).height(300).padBottom(4).row();
+        root.add(title).width(960).height(300).padBottom(-100).row();
         root.add(subtitle).padBottom(20).row();
         root.add(panel);
 

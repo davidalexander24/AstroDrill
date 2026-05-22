@@ -2,6 +2,8 @@ package com.david.astrodrill.network;
 
 import com.badlogic.gdx.math.RandomXS128;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonWriter;
 import com.david.astrodrill.GameManager;
 import com.david.astrodrill.entity.Block;
 import com.david.astrodrill.entity.Block.BlockType;
@@ -10,8 +12,6 @@ import com.david.astrodrill.entity.Player;
 import com.david.astrodrill.item.ItemType;
 import com.david.astrodrill.machine.Machine;
 import com.david.astrodrill.screen.PlayScreen;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,12 +22,12 @@ import java.util.Map;
  * Snapshot / restore for the entire player save: player, vault, hub, world delta, machines.
  * World state is stored as a delta against the seeded procedural generation — small payload
  * (a few KB typically) instead of dumping every grid cell.
+ *
+ * Uses libGDX Json so this compiles for both desktop and GWT.
  */
 public final class SaveStateSerializer {
 
     public static final int SCHEMA_VERSION = 1;
-
-    private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
     private static final int COLS = PlayScreen.COLS_PUBLIC;
     private static final int ROWS = PlayScreen.ROWS_PUBLIC;
@@ -83,11 +83,35 @@ public final class SaveStateSerializer {
         public boolean userDisabled;
     }
 
+    // ───────────────────────── Json setup ─────────────────────────
+
+    /**
+     * libGDX Json doesn't see generic type parameters at runtime (type erasure),
+     * so we register the element/value types for each generic field here. Without
+     * these hints, Map<String,Integer> would deserialize as Map<String,Float> and
+     * blow up on int unboxing downstream.
+     */
+    private static Json newJson() {
+        Json json = new Json();
+        json.setOutputType(JsonWriter.OutputType.json);
+        json.setUsePrototypes(false);
+        json.setIgnoreUnknownFields(true);
+
+        json.setElementType(GameSaveDto.class, "globalVault", Integer.class);
+        json.setElementType(PlayerDto.class, "inventory", Integer.class);
+        json.setElementType(PlayerDto.class, "machineInventory", Integer.class);
+        json.setElementType(WorldDto.class, "minedCells", int[].class);
+        json.setElementType(WorldDto.class, "placedBlocks", PlacedBlockDto.class);
+        json.setElementType(WorldDto.class, "machines", MachineDto.class);
+
+        return json;
+    }
+
     // ───────────────────────── snapshot ─────────────────────────
 
     public static String snapshot(PlayScreen play, Player player, LanderHub hub) {
         GameSaveDto dto = buildSnapshot(play, player, hub);
-        return GSON.toJson(dto);
+        return newJson().toJson(dto, GameSaveDto.class);
     }
 
     public static GameSaveDto buildSnapshot(PlayScreen play, Player player, LanderHub hub) {
@@ -192,7 +216,7 @@ public final class SaveStateSerializer {
 
     public static GameSaveDto parse(String json) {
         if (json == null || json.isEmpty()) return null;
-        return GSON.fromJson(json, GameSaveDto.class);
+        return newJson().fromJson(GameSaveDto.class, json);
     }
 
     // ───────────────────────── helpers ─────────────────────────

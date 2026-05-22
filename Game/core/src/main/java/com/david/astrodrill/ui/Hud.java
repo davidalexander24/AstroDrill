@@ -7,7 +7,6 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
@@ -44,7 +43,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     private Table table;
     private Label.LabelStyle labelStyle, warningStyle;
     private BitmapFont font;
-    private FreeTypeFontGenerator generator;
     private Label batteryLabel, batteryWarningLabel;
     private Player player;
     private LanderHub landerHub;
@@ -108,10 +106,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         table.top().left();
         table.setFillParent(true);
 
-        generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/arial.ttf"));
-        FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        p.size = 20; p.color = Color.WHITE; p.borderWidth = 1f; p.borderColor = Color.BLACK;
-        font = generator.generateFont(p);
+        font = Fonts.create(20, Color.WHITE, 1f);
 
         labelStyle = new Label.LabelStyle(font, Color.WHITE);
         warningStyle = new Label.LabelStyle(font, Color.RED);
@@ -183,17 +178,9 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         tabActiveTexture = createSolidTexture(0.2f, 0.4f, 0.7f, 1f);
         tabInactiveTexture = createSolidTexture(0.1f, 0.15f, 0.25f, 0.8f);
 
-        FreeTypeFontGenerator.FreeTypeFontParameter tp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        tp.size = 24; tp.color = new Color(0.6f, 0.85f, 1f, 1f); tp.borderWidth = 1.5f; tp.borderColor = Color.BLACK;
-        hubTitleFont = generator.generateFont(tp);
-
-        FreeTypeFontGenerator.FreeTypeFontParameter bp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        bp.size = 18; bp.color = Color.WHITE; bp.borderWidth = 1f; bp.borderColor = Color.BLACK;
-        hubButtonFont = generator.generateFont(bp);
-
-        FreeTypeFontGenerator.FreeTypeFontParameter sp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        sp.size = 14; sp.color = Color.WHITE; sp.borderWidth = 0.5f; sp.borderColor = Color.BLACK;
-        hubSmallFont = generator.generateFont(sp);
+        hubTitleFont = Fonts.create(24, new Color(0.6f, 0.85f, 1f, 1f), 1.5f);
+        hubButtonFont = Fonts.create(18, Color.WHITE, 1f);
+        hubSmallFont = Fonts.create(14, Color.WHITE, 0.5f);
 
         hubPanel = new Table();
         hubPanel.setFillParent(true);
@@ -702,17 +689,9 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         slotBgTexture = createSolidTexture(0.12f, 0.12f, 0.18f, 0.8f);
         slotActiveBgTexture = createSolidTexture(0.25f, 0.55f, 0.9f, 0.9f);
 
-        FreeTypeFontGenerator.FreeTypeFontParameter sp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        sp.size = 16; sp.color = Color.WHITE; sp.borderWidth = 1f; sp.borderColor = Color.BLACK;
-        hotbarFont = generator.generateFont(sp);
-
-        FreeTypeFontGenerator.FreeTypeFontParameter smp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        smp.size = 11; smp.color = new Color(0.7f, 0.7f, 0.7f, 1f); smp.borderWidth = 0.5f; smp.borderColor = Color.BLACK;
-        hotbarSmallFont = generator.generateFont(smp);
-
-        FreeTypeFontGenerator.FreeTypeFontParameter np = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        np.size = 16; np.color = new Color(0.85f, 0.9f, 1f, 1f); np.borderWidth = 1f; np.borderColor = Color.BLACK;
-        hotbarNameFont = generator.generateFont(np);
+        hotbarFont = Fonts.create(16, Color.WHITE, 1f);
+        hotbarSmallFont = Fonts.create(11, new Color(0.7f, 0.7f, 0.7f, 1f), 0.5f);
+        hotbarNameFont = Fonts.create(16, new Color(0.85f, 0.9f, 1f, 1f), 1f);
 
         hotbarWrapper = new Table();
         hotbarWrapper.setFillParent(true);
@@ -781,9 +760,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     // ── Banking Popup ────────────────────────────────────────────────────
 
     private void buildBankingPopup() {
-        FreeTypeFontGenerator.FreeTypeFontParameter bp = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        bp.size = 18; bp.color = new Color(0.3f, 1f, 0.5f, 1f); bp.borderWidth = 1.5f; bp.borderColor = Color.BLACK;
-        bankingFont = generator.generateFont(bp);
+        bankingFont = Fonts.create(18, new Color(0.3f, 1f, 0.5f, 1f), 1.5f);
 
         Table pw = new Table();
         pw.setFillParent(true);
@@ -1030,7 +1007,7 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
     public void updateBattery() {
         if (player == null) return;
         float pct = (player.currentBattery / player.maxBattery) * 100f;
-        batteryLabel.setText(String.format("Battery: %.0f%%", pct));
+        batteryLabel.setText("Battery: " + Math.round(pct) + "%");
         if (pct <= LOW_BATTERY_THRESHOLD) {
             batteryLabel.getStyle().fontColor = Color.RED;
             batteryWarningLabel.setText("!! LOW BATTERY !!");
@@ -1067,7 +1044,6 @@ public class Hud implements InventoryObserver, VaultObserver, Disposable {
         if (hotbarSmallFont != null) hotbarSmallFont.dispose();
         if (hotbarNameFont != null) hotbarNameFont.dispose();
         if (bankingFont != null) bankingFont.dispose();
-        if (generator != null) generator.dispose();
         if (panelBgTexture != null) panelBgTexture.dispose();
         if (buttonUpTexture != null) buttonUpTexture.dispose();
         if (buttonOverTexture != null) buttonOverTexture.dispose();

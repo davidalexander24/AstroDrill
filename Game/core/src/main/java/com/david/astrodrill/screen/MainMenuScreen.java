@@ -58,6 +58,7 @@ public class MainMenuScreen implements Screen {
         Table root = new Table();
         root.setFillParent(true);
         root.center();
+        root.padBottom(100);
         stage.addActor(root);
 
         GameManager gm = GameManager.getInstance();
@@ -67,12 +68,13 @@ public class MainMenuScreen implements Screen {
         Image title = new Image(logoTexture);
         title.setScaling(com.badlogic.gdx.utils.Scaling.fit);
         
-        String userName = gm.getCurrentUsername() != null ? gm.getCurrentUsername() : "?";
-        Label welcome = new Label("Logged in as " + userName, skin.smallStyle);
+        Label welcome = new Label(
+                gm.isLoggedIn() ? "Logged in as " + gm.getCurrentUsername() : "Playing as Guest (offline)",
+                skin.smallStyle);
 
         Table panel = new Table();
         panel.setBackground(skin.panelBackground);
-        panel.pad(30);
+        panel.pad(3);
         panel.defaults().pad(8).width(340).height(48);
 
         continueButton = new TextButton("Continue", skin.disabledButtonStyle);
@@ -133,8 +135,8 @@ public class MainMenuScreen implements Screen {
         panel.add(statusLabel).padTop(16).width(340).height(20).row();
 
         // Properly size the logo and remove the left padding on the panel so it's perfectly centered
-        root.add(title).width(960).height(300).padBottom(4).row();
-        root.add(welcome).padBottom(40).row();
+        root.add(title).width(960).height(300).padBottom(-100).row();
+        root.add(welcome).padBottom(10).row();
         root.add(panel);
 
         Gdx.input.setInputProcessor(stage);
