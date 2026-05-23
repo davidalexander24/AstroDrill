@@ -34,9 +34,9 @@ The player crash-lands in a drop pod (the **LanderHub**), starts with nothing bu
 
 ## The Gameplay Loop
 
-1. **Survive & Dig.** Manage a draining jetpack battery as you venture into hostile geological strata (Dirt → Stone → Basalt → Obsidian → Uranium). Return to the LanderHub safe zone to recharge before you stall mid-shaft.
+1. **Survive & Dig.** Manage a draining jetpack battery as you venture into hostile geological strata. Return to the LanderHub safe zone to recharge before you stall mid-shaft.
 2. **Automate.** Graduate from hand-mining to a network of Auto-Miners, Smelters, Assemblers, Refineries and Fabs, all wired together by an **adjacency-based power grid** of Coal Generators.
-3. **Tech-Gate.** Upgrading the LanderHub is a deliberate resource sink: it proves you've automated one tier of materials before unlocking the next (Crust → Mantle → Core).
+3. **Hubgrade.** Upgrading the LanderHub is necessary before unlocking the next layer (Crust → Mantle → Core), though you might want to automate the previous tier of materials first.
 4. **Escape.** Refine endgame materials (Rocket Fuel, Hull Plating, Circuit Boards) and launch a Box2D-simulated rocket from the surface. Reach altitude ≥ 1000 to win.
 
 ### Win condition
