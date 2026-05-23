@@ -22,7 +22,6 @@ Pre-rendered images live in [`docs/img/`](./img/).
   - [5.4 Factory Method (`MachineFactory`)](#54-factory-method-machinefactory)
   - [5.5 Strategy (`EngineStrategy`)](#55-strategy-enginestrategy)
   - [5.6 State (`FlightState`)](#56-state-flightstate)
-- [Rendering images](#rendering-images)
 
 ## 1. Entity Relationship Diagram (ERD)
 
