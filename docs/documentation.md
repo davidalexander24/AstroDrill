@@ -222,7 +222,7 @@ To make this work, `PlayScreen` updates machines in two phases per frame: non-ge
 
 ## Backend API
 
-Base path: `/api/game`. CORS is wide open (`*`) for local dev; tighten before deploy.
+Base path: `/api/game`. CORS is wide open (`*`) via `CorsFilter`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -244,8 +244,8 @@ A save is a single JSON blob in `SaveState.data` (`TEXT` column) plus `updatedAt
 
 `SaveStateSerializer.GameSaveDto` (schema version 1) contains:
 
-- **Player:** position, batteries, tier levels, active hotbar slot, block inventory, machine inventory.
-- **`globalVault`:** `Map<ItemType, Integer>` (Gson serialises enum keys as strings).
+- **Player:** position, batteries, tier levels, active hotbar slot, block inventory, machine inventory, `playtimeMs`, `hasLaunchedSuccessfully`.
+- **`globalVault`:** `Map<ItemType, Integer>` (enum keys serialised as strings).
 - **Hub:** position, size, tier.
 - **World:** a delta against the deterministic seed. `seed` (long), plus `minedCells: [[col, row], ...]`, plus `placedBlocks: [{col, row, type}, ...]`, plus `machines: [{type, x, y, processTimer, userDisabled}, ...]`. Typical payload is under 5 KB.
 
@@ -254,8 +254,9 @@ A save is a single JSON blob in `SaveState.data` (`TEXT` column) plus `updatedAt
 ### Save triggers and restoration
 
 - Manual save: `F5` in `PlayScreen`, with a HUD toast for success or failure.
-- Save on exit: `Main.dispose()` calls `BackendClient.saveAndWait(req, 2000ms)`. This bypasses `Gdx.app.postRunnable` because the render loop is already stopped.
-- Restoration order in `PlayScreen.show()`: regen world from seed, remove mined cells, add placed blocks (`isPlayerPlaced=true`), recreate machines via `MachineFactory`, restore player, hub, and global vault. All mutations go through the normal codepaths so block invariants hold.
+- Save & Exit: the HUD button fires `requestSave(silent, onSuccess)` with a callback that defers the screen transition until the save completes, preventing stale-save races.
+- On `FlightScreen` WIN: `hasLaunchedSuccessfully` is set on the player and a save is fired (once, guarded by `winReported`) so `fastestLaunchTime` reaches the leaderboard.
+- Restoration order in `PlayScreen.show()`: regen world from seed, remove mined cells, add placed blocks (`isPlayerPlaced=true`), recreate machines via `MachineFactory`, restore player (including `playtimeMs` and `hasLaunchedSuccessfully`), hub, and global vault. All mutations go through the normal codepaths so block invariants hold.
 
 ## Testing
 
@@ -281,6 +282,31 @@ A save is a single JSON blob in `SaveState.data` (`TEXT` column) plus `updatedAt
 4. Add a `MachineRecipe` (cost, result item type, `requiredHubTier`, description).
 5. Add the 2-letter symbol to both the hotbar render and the in-world block render.
 6. If the machine consumes power, it does so automatically by extending `Machine`, no extra wiring required. If it generates power, model it on `CoalGenerator`.
+
+## Deployment
+
+### Docker Compose (recommended)
+
+`Backend/Dockerfile` is a multi-stage build: Maven 3.9 + JDK 17 for compilation, JRE 17 Alpine for the runtime image. `Backend/docker-compose.yml` defines two services:
+
+- `postgres` (PostgreSQL 16 Alpine, persistent volume, no host port)
+- `backend` (Spring Boot, bound to `127.0.0.1:8081`)
+
+Steps:
+
+1. Create `Backend/.env` (gitignored) with `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`.
+2. `cd Backend && docker compose up -d --build`
+3. Expose port 8081 over HTTPS using a reverse proxy, Tailscale Funnel, or similar.
+4. Update `BackendClient.baseUrl` in `Game/core/.../network/BackendClient.java` to point at your public URL.
+5. Rebuild the GWT client: `cd Game && ./gradlew html:dist`
+
+### Railway (alternative)
+
+`Backend/nixpacks.toml` configures a Railway deploy. Set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and `PORT` as Railway env vars. Update `BackendClient.baseUrl` to the Railway-provided URL and rebuild the GWT dist.
+
+### Serialization note
+
+The game client uses libGDX `JsonReader`/`JsonValue` for parsing and manual `StringBuilder` writers for serialization. This avoids all reflection, which is required for GWT compatibility (GWT's reflection emulation does not support wrapper types like `java.lang.Long`). Gson was removed from the client for this reason.
 
 ## Where to look first
 

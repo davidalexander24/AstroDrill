@@ -43,7 +43,4 @@ assets/assets.txt
 hs_err_pid*
 
 ## Others
-.agents
-.claude
-CLAUDE.md
 *.py

@@ -22,15 +22,12 @@ The player crash-lands in a drop pod (the **LanderHub**), starts with nothing bu
 
 ## Screenshots
 
-<!-- Drop gameplay captures into Game/assets/screenshots/ and reference them here. -->
-<!--
 <p align="center">
-  <img src="Game/assets/screenshots/mining.png"  width="32%" alt="Mining phase" />
-  <img src="Game/assets/screenshots/factory.png" width="32%" alt="Factory automation" />
-  <img src="Game/assets/screenshots/flight.png"  width="32%" alt="Rocket flight" />
+  <img src="docs/screenshots/mining.png"  width="32%" alt="Mining phase" />
+  <img src="docs/screenshots/factory.png" width="32%" alt="Factory automation" />
+  <img src="docs/screenshots/flight.png"  width="32%" alt="Rocket flight" />
 </p>
 <p align="center">Mining · Factory · Escape Flight</p>
--->
 
 ## The Gameplay Loop
 
@@ -72,24 +69,36 @@ Stand inside the LanderHub safe zone with all three in the global vault, press *
 - **Game client:** Java 17 · LibGDX · Gradle wrapper · LWJGL3 desktop launcher · GWT/WebGL `html` module for browser builds
 - **Backend:** Java 17 · Spring Boot 4 · Spring Data JPA · Spring Validation · BCrypt (`spring-security-crypto`) · Maven wrapper
 - **Database:** PostgreSQL (prod) · H2 in PostgreSQL-mode (tests)
-- **Serialization:** Gson (client) · Jackson 3 (backend)
+- **Serialization:** libGDX `JsonReader`/`JsonValue` + manual `StringBuilder` writers (client, reflection-free for GWT compatibility) · Jackson 3 (backend)
 - **Audio:** `Gdx.audio.Sound` for SFX, `Gdx.audio.Music` for streamed rocket launch
 - **Build orchestration:** root `package.json` with `concurrently` to run both apps with one command
-- **Deploy:** Railway via `Backend/nixpacks.toml`
+- **Deploy:** Docker Compose (self-hosted) + Tailscale Funnel (public HTTPS) · Railway as fallback via `Backend/nixpacks.toml`
 
 ## Repository Layout
 
 ```
 AstroDrill/
-├── Game/                 LibGDX client (Gradle)
-│   ├── core/             Shared gameplay (screens, entities, machines, crafting, network client)
-│   ├── lwjgl3/           Desktop launcher (primary target)
-│   ├── html/             GWT WebGL build
-│   └── assets/           Textures, sounds, fonts
-├── Backend/              Spring Boot REST API (Maven)
-│   └── src/main/java/    controllers, entities, services, DTOs
-├── Docs/                 Diagrams, Full documentation & design (tuning numbers, recipes, strata, save schema)
-└── package.json          Tiny root launcher (npm run dev → both apps)
+├── Game/                           LibGDX client (core, lwjgl3, html)
+│   └── core/.../astrodrill/
+│       ├── screen/                 6 screens (Login, Play, Flight, ...)
+│       ├── entity/                 Player, Block, Rocket, LanderHub
+│       ├── machine/                Machine + 11 subclasses + MachineFactory
+│       ├── strategy/               EngineStrategy (Chemical, Ion)
+│       ├── observer/               VaultObserver, InventoryObserver
+│       ├── crafting/               MachineRecipe, UpgradeDefinition
+│       ├── network/                BackendClient + DTOs
+│       └── GameManager             Singleton, screen transitions
+├── Backend/                        Spring Boot REST API
+│   ├── Dockerfile                  multi-stage build (Maven → JRE Alpine)
+│   ├── docker-compose.yml          backend + PostgreSQL container
+│   └── src/main/java/.../backend/
+│       ├── controller/             GameController, exception handler
+│       ├── service/                AuthService, GameService
+│       ├── entity/                 Player, SaveState, Leaderboard
+│       ├── repository/             JPA repositories (3 entities)
+│       └── dto/                    Request/Response DTOs
+├── docs/                           Documentation, diagrams, slides
+└── package.json                    npm run dev launches both
 ```
 
 ## Quick Start
@@ -104,7 +113,7 @@ AstroDrill/
 
 ```bash
 npm install           # one-time, pulls concurrently
-npm run dev         # color-tagged BACKEND/GAME in one terminal
+npm run dev           # color-tagged BACKEND/GAME in one terminal
 ```
 
 The backend listens on `:8080`; the game window opens via LWJGL3.
@@ -194,25 +203,27 @@ cd Backend && ./mvnw test -Dtest=AuthControllerTest    # single class
 
 Coverage spans `AuthControllerTest` (register/login happy + 401 + 409 + validation), `SaveLoadTest` (blob roundtrip + 404 paths + high-score preservation), and `LeaderboardTest` (ordering + DTO shape). Tests run against H2 in PostgreSQL mode (`src/test/resources/application.properties`), so they don't need a real Postgres instance.
 
-The game client has no automated test suite (typical for LibGDX projects); gameplay regressions are caught by running the LWJGL3 launcher.
+The game client has no automated test suite; gameplay regressions are caught by running the LWJGL3 launcher.
 
 ## Deployment
 
-The backend is Railway-ready via `Backend/nixpacks.toml`:
+The backend is self-hosted on a headless Debian server via Docker Compose (PostgreSQL 16 + Spring Boot), exposed over HTTPS through Tailscale Funnel on port 8443. Railway is kept as a cold fallback. The game client (GWT/HTML build) is hosted on [itch.io](https://davidalexanderr.itch.io/astrodrill).
 
-```toml
-providers = ["java"]
-[phases.build]
-cmds = ["./mvnw package -DskipTests"]
-[start]
-cmd = "java -jar target/backend-0.0.1-SNAPSHOT.jar"
-```
+**Live API base URL:** `https://david-srvr.ostrich-hoki.ts.net:8443/api/game`
 
-Set the following Railway env vars: `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PORT`. The game client points at the deployed URL via `BackendClient` in `Game/core`.
+| Endpoint | Try it |
+| --- | --- |
+| Leaderboard | `GET /leaderboard` |
+| Register | `POST /register` `{"username":"test","password":"test"}` |
+| Login | `POST /login` `{"username":"test","password":"test"}` |
+
+For setup instructions, see the [Deployment section in the full documentation](./docs/documentation.md#deployment).
 
 ## License
 
-All rights reserved (license pending). Reach out before redistributing or building on the codebase.
+Code is released under the [MIT License](./LICENSE).
+
+Game assets (textures, sprites, audio) under `Game/assets/` may include content which carries its own terms of service. Treat the assets as "all rights reserved" and reach out before redistributing them.
 
 ---
 
