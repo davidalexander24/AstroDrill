@@ -25,8 +25,8 @@ import java.util.List;
  */
 public final class BackendClient {
 
-    // Production backend (Railway). For local dev, point this at http://localhost:8080/api/game.
-    public static String baseUrl = "https://astrodrill-backend-production.up.railway.app/api/game";
+    // Production backend (self-hosted). Fallback: https://astrodrill-backend-production.up.railway.app/api/game
+    public static String baseUrl = "https://david-srvr.ostrich-hoki.ts.net:8443/api/game";
 
     public interface Callback<T> {
         void onSuccess(T result);
